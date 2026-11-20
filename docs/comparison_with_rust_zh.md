@@ -28,7 +28,7 @@ SD 编解码、服务端与客户端核心；尚未覆盖 SOME/IP-TP 重组、E2
 | 服务端请求分发 | 仅有非 SD 原始数据报回调 | 暂无 | 两者都未提供类型化 method 分发 |
 | 客户端发现 / 订阅 / RPC | 有（async，oneshot 响应） | 有（回调 + 超时） | 请求 ID 规则一致：client<<16 \| session |
 | E2E 保护 | 仅 trait 钩子 | 无 | 本项目列为范围外 |
-| 组播加入 | 有（socket2） | 无（发送可指定组播地址） | 需在接入层补 `IP_ADD_MEMBERSHIP` |
+| 组播加入 | 有（socket2） | 有（`JoinSdMulticast` + `IP_ADD_MEMBERSHIP`） | 组播实测仍需真实网卡环境 |
 | 互操作实测（vsomeip） | 有（Docker） | 未跑 | 本机 Docker 守护进程不可用 |
 | 金丝雀/无分配见证 | 有 | 有 | 本项目用全局 `operator new` 计数 |
 
@@ -58,8 +58,7 @@ SD 编解码、服务端与客户端核心；尚未覆盖 SOME/IP-TP 重组、E2
 
 1. **互操作实测**：换到 Docker 可用的机器，用 `tests/data/vsomeip-peer` 的镜像跑
    find/offer/subscribe/publish/RPC。
-2. **组播加入与发送接口绑定**：在 `udp_link.hpp` 增加 `JoinMulticast` 与绑定接口地址，
-   使服务端能直接运行在真实网卡。
+2. **组播实测**：加入逻辑与示例已就绪，需在真实网卡/IGMP 环境下与 vsomeip 对跑。
 3. **服务端方法分发**：为 `Server` 增加编译期 `RequestHandler` 钩子，补齐 RPC 服务侧。
 4. **E2E 钩子**：在 `Server`/`Client` 的收发路径预留 `E2EHandle` 策略，默认空实现。
 5. **目标板实测**：ARM Linux / RT-Thread 上的内存与吞吐数据，目前只有 x86 结果。

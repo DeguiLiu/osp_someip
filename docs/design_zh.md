@@ -111,6 +111,8 @@ placement new（`vocabulary.hpp`）；本仓库不直接使用 `new`、`delete`�
 以及把 `Server` 的发送通过 `UdpSocket::SendTo` 发出；接收侧由调用方 `RecvFrom` 后把源地址转回
 `Ipv4Endpoint` 再交给 `Server::HandleDatagram`。`tests/test_udp_loopback.cpp` 用真实 UDP 套接字在
 127.0.0.1 上跑通 find → offer → subscribe → ack → notification 全链路，不依赖 Docker 与组播。
+`JoinSdMulticast()` 封装 `IP_ADD_MEMBERSHIP`，`examples/server_demo.cpp` 用它绑定 30490 并加入
+239.255.0.255，可直接在真实网卡上被 vsomeip 发现。
 
 ### 3.8 客户端核心
 

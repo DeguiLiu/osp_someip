@@ -11,6 +11,7 @@ set(OSP_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../newosp/include"
     CACHE PATH "newosp include directory")
 
 option(SOMEIP_BUILD_TESTS "Build tests" ON)
+option(SOMEIP_BUILD_EXAMPLES "Build examples" OFF)
 option(SOMEIP_NO_EXCEPTIONS "Build tests with -fno-exceptions -fno-rtti" OFF)
 
 # --- Core: header-only interface library ---
@@ -31,4 +32,8 @@ endif()
 if(SOMEIP_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+if(SOMEIP_BUILD_EXAMPLES)
+    add_subdirectory(examples)
 endif()

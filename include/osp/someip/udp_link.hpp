@@ -10,6 +10,7 @@
 #include "osp/socket.hpp"
 #include "osp/span.hpp"
 
+#include <array>
 #include <cstdint>
 
 namespace osp::someip {
@@ -34,6 +35,14 @@ class UdpSender final {
 /// @brief Endpoint of a datagram source, for Server::HandleDatagram().
 inline Ipv4Endpoint EndpointOf(const osp::SocketAddress& address) noexcept {
   return Ipv4Endpoint{address.Ipv4Address(), address.Port()};
+}
+
+/// @brief Join 239.255.0.255:30490 on @p interface_address (all-zero = any).
+inline bool JoinSdMulticast(osp::UdpSocket& socket,
+                            const std::array<std::uint8_t, 4>& interface_address) noexcept {
+  const auto group = osp::SocketAddress::FromIpv4Bytes(kSdMulticastAddress, kSdPort);
+  return group.has_value() &&
+         socket.JoinMulticastGroup(group.value(), interface_address).has_value();
 }
 
 }  // namespace osp::someip

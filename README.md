@@ -16,6 +16,7 @@
 | Service Discovery | entry / option / header 编解码、数据报构建器、零拷贝解析（M1） |
 | 服务端 | offer/stop-offer、find 应答、订阅槽表、事件发布、TTL 到期与 offer 重播（M2） |
 | 客户端 | 发现缓存、find 按倍增间隔重发、请求/响应匹配、超时、事件回调（M3） |
+| 网络接入 | 单播收发、`SO_REUSEADDR`、SD 组播加入（`JoinSdMulticast`） |
 | 零堆 | 全局 `operator new` 计数见证进程，完整场景 0 次分配 |
 | 测试 | 87 个用例、1306 条断言，含客户端/服务端真实 UDP 联调；普通构建与无异常构建均通过 |
 
@@ -55,6 +56,14 @@ ctest --test-dir build --output-on-failure
 cmake -S . -B build-noexc -DSOMEIP_NO_EXCEPTIONS=ON
 cmake --build build-noexc -j8
 ctest --test-dir build-noexc --output-on-failure
+```
+
+可运行的服务端示例（绑定 30490、加入 239.255.0.255、提供 0x1234 并每秒发布事件）：
+
+```bash
+cmake -S . -B build-demo -DSOMEIP_BUILD_EXAMPLES=ON
+cmake --build build-demo -j8
+./build-demo/examples/someip_server_demo --iface 127.0.0.1 --service 1234 --seconds 5
 ```
 
 newosp 头文件默认取 `../newosp/include`，可用 `-DOSP_INCLUDE_DIR=<path>` 覆盖。
