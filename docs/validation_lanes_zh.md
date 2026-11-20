@@ -21,7 +21,8 @@ setarch $(uname -m) -R env ASAN_OPTIONS=detect_leaks=1 ./build-asan/tests/someip
 ./build/tests/someip_no_alloc          # exit 0 表示零分配
 ```
 
-验收：118 个用例 / 3846 条断言全过；sanitizer 无报告；零分配进程返回 0。
+验收：118 个用例 / 3846 条断言全过；sanitizer 无报告；零分配进程返回 0；
+`someip_headers_self_contained` 把 26 个公开头文件逐个单独编译，全部通过。
 
 跨实现互通（已验证，双向）：
 

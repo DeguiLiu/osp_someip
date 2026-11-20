@@ -27,6 +27,14 @@ add_executable(someip_no_alloc no_alloc_witness.cpp)
 target_link_libraries(someip_no_alloc PRIVATE osp_someip)
 add_test(NAME someip_no_alloc COMMAND someip_no_alloc)
 
+# Every public header must compile on its own. Skipped when cross compiling:
+# the check runs the compiler directly, outside CMake's toolchain environment.
+if(NOT CMAKE_CROSSCOMPILING)
+    add_test(NAME someip_headers_self_contained
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_headers.sh
+                ${CMAKE_CXX_COMPILER} ${CMAKE_SOURCE_DIR}/include ${OSP_INCLUDE_DIR})
+endif()
+
 add_executable(someip_tests
     test_message_id.cpp
     test_message_type.cpp
