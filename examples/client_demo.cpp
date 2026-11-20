@@ -12,6 +12,7 @@
 
 #include "osp/log.hpp"
 #include "osp/someip/client.hpp"
+#include "osp/someip/tp.hpp"
 #include "osp/someip/udp_link.hpp"
 
 #include <array>
@@ -194,7 +195,10 @@ int main(int argc, char** argv) {
   const osp::someip::Ipv4Endpoint server =
       options.use_multicast ? osp::someip::SdMulticastEndpoint()
                             : osp::someip::Ipv4Endpoint{options.server, osp::someip::kSdPort};
-  osp::someip::Client<ClientSink, DemoHandler, 4U, 4U> client(sink, handler, local, server);
+  // TP is enabled so a provider may answer with several segments.
+  osp::someip::Client<ClientSink, DemoHandler, 4U, 4U, 1400U, osp::someip::NoE2E, 8U,
+                      8U, osp::someip::TpReassembly<2048U, 2U, 2000U>>
+      client(sink, handler, local, server);
 
   if (!client.StartFind(options.service_id, 0U)) {
     std::printf("failed to start the find sequence\n");

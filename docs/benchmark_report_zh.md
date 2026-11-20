@@ -82,7 +82,7 @@ aarch64 示例程序（动态链接，含 `printf`/日志等演示代码）：
 | 程序 | text | data | bss |
 |---|---|---|---|
 | `someip_server_demo`（含 TP 重组） | 23,428 | 944 | 8 |
-| `someip_client_demo` | 21,130 | 928 | 8 |
+| `someip_client_demo`（含 TP 重组） | 24,549 | 936 | 8 |
 | `someip_loopback_bench` | 28,123 | 880 | 32 |
 
 测量方式：`aarch64-linux-gnu-size`（交叉包内 binutils）。库本身是头文件，

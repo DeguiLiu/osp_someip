@@ -98,7 +98,7 @@ def subscribe_datagram(args, request_id):
     return sd_message([entry], ipv4_option(args.local, args.port), request_id)
 
 
-def tp_segments(args, payload, request_id):
+def tp_segments(args, payload, request_id, message_type=0x20):
     """Split payload into SOME/IP-TP segments; chunk must be a multiple of 16."""
     chunk = max(16, (args.tp_chunk // 16) * 16)
     segments = []
@@ -108,7 +108,7 @@ def tp_segments(args, payload, request_id):
         word = ((offset // 16) << 4) | (1 if more else 0)
         body = struct.pack(">I", word) + piece
         header = someip_header(
-            (args.service << 16) | args.method, 8 + len(body), request_id, 0x20
+            (args.service << 16) | args.method, 8 + len(body), request_id, message_type
         )
         segments.append(header + body)
     return segments
@@ -299,13 +299,24 @@ def run_server(args):
                         subscribers.add(endpoint)
                         sd_sock.sendto(ack_datagram(args, next_session()), source)
                         print(f"subscribe from {source} -> ack to {endpoint}")
-            elif message_type == 0x00:
+            elif message_type in (0x00, 0x20):
                 body = datagram[16 : 16 + max(0, length - 8)]
-                response = (
-                    someip_header(message_id, 8 + len(body), request_id, 0x80, 0x00) + body
-                )
-                service_sock.sendto(response, source)
-                print(f"request 0x{message_id & 0xFFFF:04X} -> {len(body)} bytes echoed")
+                if message_type == 0x20:
+                    # TP request: the probe only counts the segments.
+                    print(f"tp segment of {len(body) - 4} bytes")
+                    continue
+                if args.tp_chunk:
+                    pattern = bytes(range(128))
+                    for segment in tp_segments(args, pattern, request_id, 0xA0):
+                        service_sock.sendto(segment, source)
+                    print(f"request 0x{message_id & 0xFFFF:04X} -> tp response of 128 bytes")
+                else:
+                    response = (
+                        someip_header(message_id, 8 + len(body), request_id, 0x80, 0x00)
+                        + body
+                    )
+                    service_sock.sendto(response, source)
+                    print(f"request 0x{message_id & 0xFFFF:04X} -> {len(body)} bytes echoed")
 
         now = time.monotonic()
         if subscribers and (now - last_publish) >= 1.0:

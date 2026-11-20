@@ -101,6 +101,9 @@ cmake --build build-demo -j8
 `someip_fragmented_demo` needs no sockets: it protects a 300-byte request with E2E Profile 1,
 splits it into 19 TP segments, feeds them to a server and verifies the protected reply.
 
+`--tp-chunk` also works with `--mode server`: the probe splits its reply into TP segments to
+exercise client-side reassembly.
+
 Passing `--multicast` to the client switches SD to the multicast group: it opens a second socket
 on 30490 while the service traffic stays on `--port`. Without the flag, SD and service share one
 socket, which suits two processes on the same host.

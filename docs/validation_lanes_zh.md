@@ -83,6 +83,17 @@ python3 tools/sd_probe.py --server 127.0.0.1 --service 1234 --method 0001 --tp-c
 输出 `request sent as tp segments of 32`，响应载荷是 `00 01 02 … 7f` 的完整 128 字节。
 这条链路说明重组实现能被一份独立的 Python 分段器驱动。
 
+反方向同样验证过（Python 服务端 → C++ 客户端）：
+
+```bash
+python3 tools/sd_probe.py --mode server --service 1234 --seconds 8 --tp-chunk 32 &
+./build-demo/examples/someip_client_demo --server 127.0.0.1 --local 127.0.0.1 \
+    --port 30510 --service 1234 --method 0001 --seconds 5
+```
+
+探针把 128 字节应答拆成 4 个 TP 分段，客户端打印 `response 0x00010001, 128 payload bytes`，
+服务端日志为 `request 0x0001 -> tp response of 128 bytes`。
+
 订阅续订实测：Python 服务端运行 15 s、C++ 客户端运行 12 s，服务端记录 3 次
 `subscribe from`（初始 + TTL/2 两次续订），客户端收到 12 条事件；offer TTL 到期后客户端
 按预期打印 `service ... gone`。
