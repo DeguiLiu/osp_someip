@@ -92,6 +92,8 @@ class EntryView final {
       service.major_version = MajorVersion();
       service.ttl = Ttl();
       service.minor_version = MinorVersion();
+      service.index_first_options_run = IndexFirstOptionsRun();
+      service.index_second_options_run = IndexSecondOptionsRun();
       switch (Kind()) {
         case Entry::Kind::kOfferService:
           return Entry::Offer(service);
@@ -110,6 +112,8 @@ class EntryView final {
     group.ttl = Ttl();
     group.counter = Counter();
     group.event_group_id = EventGroupId();
+    group.index_first_options_run = IndexFirstOptionsRun();
+    group.index_second_options_run = IndexSecondOptionsRun();
     return (Entry::Kind::kSubscribeNack == Kind()) ? Entry::Nack(group) : Entry::Ack(group);
   }
 

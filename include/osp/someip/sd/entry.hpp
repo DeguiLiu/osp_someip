@@ -41,6 +41,10 @@ struct ServiceEntry final {
   /// @brief Seconds the entry stays valid, at most kMaxTtl.
   std::uint32_t ttl{0U};
   std::uint32_t minor_version{0U};
+  /// @brief Index of the first options run in the SD header's option array.
+  std::uint8_t index_first_options_run{0U};
+  /// @brief Index of the second options run, when the entry uses two runs.
+  std::uint8_t index_second_options_run{0U};
 
   /**
    * @brief Find entry with the wildcard any-instance, any-version fields.
@@ -65,6 +69,10 @@ struct EventGroupEntry final {
   std::uint32_t ttl{0U};
   std::uint16_t counter{0U};
   std::uint16_t event_group_id{0U};
+  /// @brief Index of the first options run in the SD header's option array.
+  std::uint8_t index_first_options_run{0U};
+  /// @brief Index of the second options run, when the entry uses two runs.
+  std::uint8_t index_second_options_run{0U};
 };
 
 static_assert(std::is_trivially_copyable<ServiceEntry>::value,
@@ -149,7 +157,7 @@ class Entry final : public osp::someip::WireEncoder<Entry> {
     // at the head of the option array, which is the only layout the builders
     // emit for a single run.
     const bool ok = writer.WriteU8(static_cast<std::uint8_t>(WireType())) &&
-                    writer.WriteU8(0U) && writer.WriteU8(0U) &&
+                    writer.WriteU8(IndexFirst()) && writer.WriteU8(IndexSecond()) &&
                     writer.WriteU8(OptionsCountValue().Value()) &&
                     writer.WriteU16Be(ServiceId()) && writer.WriteU16Be(InstanceId()) &&
                     writer.WriteU8(MajorVersion()) && writer.WriteU24Be(EffectiveTtl()) &&
@@ -201,6 +209,16 @@ class Entry final : public osp::someip::WireEncoder<Entry> {
 
   constexpr OptionsCount OptionsCountValue() const noexcept {
     return IsService() ? service_.options_count : event_group_.options_count;
+  }
+
+  constexpr std::uint8_t IndexFirst() const noexcept {
+    return IsService() ? service_.index_first_options_run
+                       : event_group_.index_first_options_run;
+  }
+
+  constexpr std::uint8_t IndexSecond() const noexcept {
+    return IsService() ? service_.index_second_options_run
+                       : event_group_.index_second_options_run;
   }
 
   constexpr std::uint16_t ServiceId() const noexcept {

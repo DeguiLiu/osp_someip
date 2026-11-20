@@ -14,6 +14,7 @@
 #include "osp/someip/message.hpp"
 #include "osp/someip/message_id.hpp"
 #include "osp/someip/message_type.hpp"
+#include "osp/someip/owned_payload.hpp"
 #include "osp/someip/payload.hpp"
 #include "osp/someip/return_code.hpp"
 #include "osp/someip/sd/entry.hpp"

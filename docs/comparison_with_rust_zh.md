@@ -38,7 +38,8 @@ SD 编解码、服务端与客户端核心；尚未覆盖 SOME/IP-TP 重组、E2
    本项目把 socket 与时钟都留给调用方，核心只有 `HandleDatagram` / `Tick` / `Request`，
    因此可在单线程事件循环、RT-Thread 任务或测试中直接复用，行为确定、无隐藏线程。
 2. **内存模型**：Rust 在 `std` 下用 `Vec`/`Arc`，`no_std` 下用 `heapless`；本项目所有
-   容器是模板参数定容的数组，解析是 `osp::span` 视图，编码写入调用方缓冲。
+   容器是模板参数定容的数组，解析是 `osp::span` 视图，编码写入调用方缓冲；
+   载荷可选借用（`OpaquePayload`）或定容持有（`OwnedPayload<Capacity>`）。
 3. **错误与回调**：Rust 用 `Result` 与 channel 更新流；本项目用 `osp::expected` 与编译期
    绑定的 `Sink` / `Handler`，没有类型擦除与堆分配。
 4. **API 形状**：Rust 的 `Client::request` 是 `async` 且等待响应；本项目的 `Request`
@@ -48,7 +49,7 @@ SD 编解码、服务端与客户端核心；尚未覆盖 SOME/IP-TP 重组、E2
 
 | 项 | Rust | 本项目 |
 |---|---|---|
-| 单元/集成测试 | 824 个 `#[test]` 标注 | 94 个用例、3657 条断言（含变异扫描） |
+| 单元/集成测试 | 824 个 `#[test]` 标注 | 98 个用例、3685 条断言（含变异扫描） |
 | 线格式 golden | 19 条手写字面量 | 19 条同源字面量（逐字节移植） |
 | 无分配 | `no_alloc_witness` 测试 | `someip_no_alloc` 进程，覆盖 server + client |
 | 真实网络 | tokio + vsomeip 容器互操作 | 真实 UDP 环回用例 + 两个进程的 server/client demo 实测 |

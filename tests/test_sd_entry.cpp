@@ -11,6 +11,7 @@
  */
 
 #include "osp/someip/sd/entry.hpp"
+#include "osp/someip/sd/entry_view.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -278,4 +279,27 @@ TEST_CASE("sd entry - short output buffer reports the required size", "[sd][entr
   REQUIRE(ErrorCode::kInsufficientBuffer == empty_written.get_error().code);
   REQUIRE(16U == empty_written.get_error().value);
   REQUIRE(0U == empty_written.get_error().available);
+}
+
+TEST_CASE("sd entry - non-zero option run indices round trip", "[sd][entry]") {
+  ServiceEntry service{};
+  service.options_count = OptionsCount(1U, 2U);
+  service.service_id = 0x1234U;
+  service.index_first_options_run = 3U;
+  service.index_second_options_run = 7U;
+  const Entry entry = Entry::Offer(service);
+
+  const std::uint8_t expected[16] = {
+      0x01U, 0x03U, 0x07U, 0x12U,  // offer, run indices 3 and 7, counts 1/2
+      0x12U, 0x34U, 0x00U, 0x00U,  // service 0x1234, instance 0
+      0x00U, 0x00U, 0x00U, 0x00U,  // major 0, ttl 0
+      0x00U, 0x00U, 0x00U, 0x00U,  // minor version 0
+  };
+  RequireEncodesTo(entry, expected);
+
+  const auto view = osp::someip::sd::EntryView::Parse(osp::make_span(expected));
+  REQUIRE(view.has_value());
+  REQUIRE(3U == view.value().IndexFirstOptionsRun());
+  REQUIRE(7U == view.value().IndexSecondOptionsRun());
+  RequireEncodesTo(view.value().ToEntry(), expected);
 }

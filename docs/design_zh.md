@@ -71,6 +71,10 @@ osp::expected<std::uint32_t, Error> DoEncodeTo(osp::span<std::uint8_t> out) cons
 `HeaderView::Parse` 返回 `ParsedHeader{view, rest}`，`MessageView::Decode` 返回
 `DecodedMessage{view, rest}`，剩余字节由调用方决定丢弃还是继续遍历。
 
+载荷有两种形态：`OpaquePayload` 借用调用方缓冲，编码时直接拷贝；
+`OwnedPayload<Capacity>` 在对象内持有最多 Capacity 字节，用于需要让载荷活过输入缓冲的场景
+（排队请求、延迟响应），两者都是零堆值类型。
+
 SD 解析沿用同一模式：`EntryView` 固定 16 字节、`OptionView` 按长度字段前进、
 `SdHeaderView::Parse` 一次性校验两个分区（`entries_size` 必须是 16 的倍数，选项长度与
 传输协议字节必须合法），校验通过后 `NextEntry()` / `NextOption()` 只做切片。未知 entry 类型
@@ -152,7 +156,7 @@ payload / 源端点` 组一个 `IncomingRequest` 交给 `OnRequest`；处理器�
 | L2 互操作 | 与 vsomeip 容器对端做 RPC、通知、订阅 | 双向收发一致 |
 | L3 目标 | ARM Linux / RT-Thread 构建与静态内存报告 | 无堆、尺寸达标 |
 
-当前 L0 结果：94 个用例、3657 条断言（含 3000 轮确定性变异扫描），外加零分配见证进程；
+当前 L0 结果：98 个用例、3685 条断言（含 3000 轮确定性变异扫描），外加零分配见证进程；
 普通构建、`-fno-exceptions -fno-rtti` 构建与 ASan+UBSan 构建均通过。
 
 ## 5. 里程碑与风险
