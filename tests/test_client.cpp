@@ -413,3 +413,51 @@ TEST_CASE("client - a quick session drop is not a restart", "[client]") {
   REQUIRE(0U == handler.reboots);
   REQUIRE(1U == client.ServiceCount());
 }
+
+TEST_CASE("client - requests and subscriptions need a discovered service", "[client]") {
+  Sink sink;
+  Handler handler;
+  Client<Sink, Handler, 4U, 2U> client(sink, handler, {{127U, 0U, 0U, 1U}, 30510U});
+  const ServiceInstance service = ServiceInstance::New(0x1234U, 0x0001U, 1U);
+  const Ipv4Endpoint source{{127U, 0U, 0U, 2U}, 30490U};
+  const std::uint8_t payload[2] = {0x01U, 0x02U};
+
+  REQUIRE(!client.Request(service, 0x0001U, osp::make_span(payload), 100U, 0U));
+  REQUIRE(0U == client.PendingCount());
+  REQUIRE(!client.Subscribe(service, 0x0001U, 10U, 0U));
+  REQUIRE(nullptr == client.FindCachedByService(0x1234U));
+  REQUIRE(0U == sink.count);
+
+  std::uint8_t offer[128] = {};
+  client.HandleDatagram(osp::make_span(offer, BuildOffer(offer, 30U, false)), source, 0U);
+  REQUIRE(nullptr != client.FindCachedByService(0x1234U));
+  REQUIRE(nullptr == client.FindCachedByService(0x9999U));
+
+  // A subscription needs a non-zero TTL that fits the 24-bit field.
+  REQUIRE(!client.Subscribe(service, 0x0001U, 0U, 0U));
+  REQUIRE(!client.Subscribe(service, 0x0001U, osp::someip::sd::kMaxTtl + 1U, 0U));
+  REQUIRE(client.Subscribe(service, 0x0001U, 10U, 0U));
+  REQUIRE(1U == client.SubscriptionCount());
+}
+
+TEST_CASE("client - pending request slots are bounded", "[client]") {
+  Sink sink;
+  Handler handler;
+  Client<Sink, Handler, 4U, 2U> client(sink, handler, {{127U, 0U, 0U, 1U}, 30510U});
+  const ServiceInstance service = ServiceInstance::New(0x1234U, 0x0001U, 1U);
+  const Ipv4Endpoint source{{127U, 0U, 0U, 2U}, 30490U};
+  std::uint8_t offer[128] = {};
+  client.HandleDatagram(osp::make_span(offer, BuildOffer(offer, 30U, false)), source, 0U);
+
+  const std::uint8_t payload[2] = {0x01U, 0x02U};
+  REQUIRE(client.Request(service, 0x0001U, osp::make_span(payload), 100U, 0U));
+  REQUIRE(client.Request(service, 0x0001U, osp::make_span(payload), 100U, 0U));
+  REQUIRE(!client.Request(service, 0x0001U, osp::make_span(payload), 100U, 0U));
+  REQUIRE(2U == client.PendingCount());
+
+  client.Tick(101U);
+  REQUIRE(0U == client.PendingCount());
+  REQUIRE(2U == handler.timeouts);
+  REQUIRE(client.Request(service, 0x0001U, osp::make_span(payload), 100U, 101U));
+  REQUIRE(1U == client.PendingCount());
+}

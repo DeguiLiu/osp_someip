@@ -440,3 +440,56 @@ TEST_CASE("server - wildcard find matches every offer", "[server][sd]") {
   }
   REQUIRE(2U == matched);
 }
+
+TEST_CASE("server - offer slots are bounded and reused per service", "[server]") {
+  Capture capture;
+  Server<Capture, 2U, 4U, 256U> server(capture);
+  const Ipv4Endpoint endpoint{{127U, 0U, 0U, 1U}, 30509U};
+  const ServiceInstance first = ServiceInstance::New(0x1001U, 1U, 1U);
+  const ServiceInstance second = ServiceInstance::New(0x1002U, 1U, 1U);
+  const ServiceInstance third = ServiceInstance::New(0x1003U, 1U, 1U);
+
+  REQUIRE(server.Offer(first, endpoint, 30U, 0U));
+  REQUIRE(server.Offer(second, endpoint, 30U, 0U));
+  REQUIRE(!server.Offer(third, endpoint, 30U, 0U));
+  REQUIRE(2U == server.OfferedCount());
+
+  // Offering the same service again updates its slot instead of taking a new one.
+  REQUIRE(server.Offer(first, endpoint, 60U, 0U));
+  REQUIRE(2U == server.OfferedCount());
+
+  server.StopOffer(first);
+  REQUIRE(1U == server.OfferedCount());
+  REQUIRE(server.Offer(third, endpoint, 30U, 0U));
+  REQUIRE(2U == server.OfferedCount());
+}
+
+TEST_CASE("server - publish without subscribers or oversized payload sends nothing", "[server]") {
+  Capture capture;
+  Server<Capture, 2U, 2U, 64U> server(capture);
+  const Ipv4Endpoint endpoint{{127U, 0U, 0U, 1U}, 30509U};
+  const ServiceInstance service = ServiceInstance::New(0x1234U, 1U, 1U);
+  REQUIRE(server.Offer(service, endpoint, 30U, 0U));
+  const std::uint32_t after_offer = capture.count;
+
+  const std::uint8_t payload[4] = {1U, 2U, 3U, 4U};
+  server.Publish(service, 0x0001U, 0x8001U, osp::make_span(payload), 100U);
+  REQUIRE(after_offer == capture.count);
+
+  const Ipv4Endpoint subscriber{{192U, 0U, 2U, 1U}, 30510U};
+  std::uint8_t subscribe[128] = {};
+  server.HandleDatagram(
+      osp::make_span(subscribe, BuildSubscribe(subscribe, 0x1234U, 0x0001U, 10U,
+                                               subscriber.address, subscriber.port)),
+      subscriber, 100U);
+  REQUIRE(1U == server.SubscriberCount());
+  const std::uint32_t after_subscribe = capture.count;
+
+  server.Publish(service, 0x0001U, 0x8001U, osp::make_span(payload), 200U);
+  REQUIRE(after_subscribe + 1U == capture.count);
+
+  // MaxDatagram is 64, so a payload above 48 bytes cannot be encoded.
+  std::uint8_t oversized[49] = {};
+  server.Publish(service, 0x0001U, 0x8001U, osp::make_span(oversized), 300U);
+  REQUIRE(after_subscribe + 1U == capture.count);
+}

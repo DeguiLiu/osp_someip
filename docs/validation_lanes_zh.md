@@ -21,7 +21,7 @@ setarch $(uname -m) -R env ASAN_OPTIONS=detect_leaks=1 ./build-asan/tests/someip
 ./build/tests/someip_no_alloc          # exit 0 表示零分配
 ```
 
-验收：123 个用例 / 12851 条断言全过；sanitizer 无报告；零分配进程返回 0；
+验收：127 个用例 / 12884 条断言全过；sanitizer 无报告；零分配进程返回 0；
 `someip_headers_self_contained` 把 26 个公开头文件逐个单独编译，全部通过。
 
 覆盖率只作趋势参考，不作为门禁：
@@ -45,7 +45,7 @@ OSP_GITHUB_MIRROR=https://ghfast.top/ cmake -S . -B /tmp/fetch-check \
 cmake --build /tmp/fetch-check -j8 && ctest --test-dir /tmp/fetch-check
 ```
 
-结果 121 项全过。这条路径验证的是 `FetchContent` 拉下来的 newosp main 与本地同级目录等价。
+结果 129 项全过。这条路径验证的是 `FetchContent` 拉下来的 newosp main 与本地同级目录等价。
 
 发布状态复核：从 Gitee 重新 `git clone --depth 1` 到空目录，`cmake --preset host-debug
 -DSOMEIP_FETCH_NEWOSP=ON` 后构建，121 项全过。仓库自包含，不依赖任何未提交文件。
@@ -155,7 +155,7 @@ ctest --test-dir build/aarch64-tests
 `qemu-aarch64 -L <root>/usr/aarch64-linux-gnu`，CTest 因此可以直接运行目标二进制。
 `LD_LIBRARY_PATH` 是解包后的 binutils 依赖，只在构建时需要。
 
-结果：121 个用例通过，1 个跳过（组播），`someip_loopback_bench` 为
+结果：126 个用例通过，1 个跳过（组播），`someip_loopback_bench` 为
 p50 11 µs、p99 24 µs、约 6.6 万次请求/秒。这是 qemu 用户态模拟，不是板上数据。
 
 两个示例程序也在 qemu 下跑通了完整链路（等同板上冒烟的命令）：
