@@ -15,10 +15,11 @@
 | 线格式 | Header / Message / Opaque payload 已实现（M0） |
 | Service Discovery | entry / option / header 编解码、数据报构建器、零拷贝解析（M1） |
 | 服务端 | offer/stop-offer、find 应答、订阅槽表、事件发布、TTL 到期与 offer 重播（M2） |
+| RPC 服务侧 | `RequestHandler` 钩子：同步分发 Request、自动回 Response/Error、支持 fire-and-forget |
 | 客户端 | 发现缓存、find 按倍增间隔重发、请求/响应匹配、超时、事件回调（M3） |
 | 网络接入 | 单播收发、`SO_REUSEADDR`、SD 组播加入（`JoinSdMulticast`） |
 | 零堆 | 全局 `operator new` 计数见证进程，完整场景 0 次分配 |
-| 测试 | 87 个用例、1306 条断言，含客户端/服务端真实 UDP 联调；普通构建与无异常构建均通过 |
+| 测试 | 88 个用例、1321 条断言，含客户端/服务端真实 UDP 联调；普通构建与无异常构建均通过 |
 
 ## 目录结构
 

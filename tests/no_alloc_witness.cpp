@@ -44,6 +44,16 @@ struct NullHandler final {
                       std::uint16_t /*event_group_id*/, std::uint32_t /*granted*/) noexcept {}
 };
 
+struct EchoRequestHandler final {
+  osp::someip::RequestReply OnRequest(
+      const osp::someip::IncomingRequest& request) noexcept {
+    osp::someip::RequestReply reply;
+    reply.handled = true;
+    reply.payload = request.payload;
+    return reply;
+  }
+};
+
 }  // namespace
 
 void* operator new(std::size_t size) {
@@ -65,7 +75,7 @@ void operator delete[](void* memory, std::size_t /*size*/) noexcept { std::free(
 int main() {
   bool ok = true;
   Sink sink;
-  osp::someip::Server<Sink, 3U, 3U> server(sink);
+  osp::someip::Server<Sink, 3U, 3U, 1400U, EchoRequestHandler> server(sink);
   const osp::someip::ServiceInstance service =
       osp::someip::ServiceInstance::New(0x1234U, 0x0001U, 1U);
 
@@ -106,6 +116,19 @@ int main() {
 
   server.Tick(1000U);
   ok = ok && 4U == sink.datagrams;
+
+  std::uint8_t request_bytes[64] = {};
+  const osp::someip::Header request_header = osp::someip::Header::New(
+      osp::someip::MessageId::FromServiceAndMethod(0x1234U, 0x0001U), 0x00010007U, 0x01U, 0x01U,
+      osp::someip::MessageTypeField::New(osp::someip::MessageType::kRequest, false),
+      osp::someip::ReturnCode::Ok(), 1U);
+  const std::uint8_t request_payload[1] = {0x7FU};
+  const osp::someip::Message<osp::someip::OpaquePayload> request(
+      request_header, osp::someip::OpaquePayload(osp::make_span(request_payload)));
+  const auto request_size = request.EncodeTo(osp::make_span(request_bytes));
+  ok = ok && request_size.has_value();
+  server.HandleDatagram(osp::make_span(request_bytes, request_size.value()), client, 40U);
+  ok = ok && 5U == sink.datagrams;
 
   NullHandler handler;
   const osp::someip::Ipv4Endpoint local{{127U, 0U, 0U, 3U}, 30511U};

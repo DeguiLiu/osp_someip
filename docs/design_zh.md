@@ -123,6 +123,14 @@ placement new（`vocabulary.hpp`）；本仓库不直接使用 `new`、`delete`�
 匹配后回调 `OnResponse`，`Tick` 到期回调 `OnTimeout`；Notification 直接回调 `OnEvent`；
 Subscribe 带上本地端点选项，Ack/Nack 通过 `OnSubscribeAck` 上报授予的 TTL。
 
+### 3.9 服务端请求分发
+
+`Server` 的第五个模板参数是 `RequestHandler`，默认 `NoRequestHandler` 忽略所有请求。
+收到 Request/RequestNoReturn 时，服务端按 `request_id / service / method / interface_version /
+payload / 源端点` 组一个 `IncomingRequest` 交给 `OnRequest`；处理器返回 `RequestReply`，
+服务端据此自动编码 Response 或 Error 并回给源端点。fire-and-forget 只分发不回复。
+处理器在编译期绑定、按值持有（`Handler()` 可取回状态），无堆、无虚函数。
+
 ## 4. 验证策略
 
 | 层级 | 内容 | 判定 |
@@ -132,7 +140,7 @@ Subscribe 带上本地端点选项，Ack/Nack 通过 `OnSubscribeAck` 上报授�
 | L2 互操作 | 与 vsomeip 容器对端做 RPC、通知、订阅 | 双向收发一致 |
 | L3 目标 | ARM Linux / RT-Thread 构建与静态内存报告 | 无堆、尺寸达标 |
 
-当前 L0 结果：87 个用例、1306 条断言，外加零分配见证进程；普通构建与
+当前 L0 结果：88 个用例、1321 条断言，外加零分配见证进程；普通构建与
 `-fno-exceptions -fno-rtti` 构建均通过。
 
 ## 5. 里程碑与风险
@@ -141,7 +149,7 @@ Subscribe 带上本地端点选项，Ack/Nack 通过 `OnSubscribeAck` 上报授�
 |---|---|---|
 | M0（完成） | header/message/walker + 3 条 golden | 无 |
 | M1（完成） | SD entry/option/header 编解码、零拷贝解析、数据报构建器 | option 长度与 entry 计数边界 |
-| M2（核心完成） | 服务端 offer/stop-offer、find 应答、订阅槽表、事件发布、TTL 与重播 | 订阅 TTL 与重播时序 |
+| M2（核心完成） | 服务端 offer/stop-offer、find 应答、订阅槽表、事件发布、RPC 分发、TTL 与重播 | 订阅 TTL 与重播时序 |
 | M3（核心完成） | 客户端发现、RPC 匹配、超时、事件回调 | 与 vsomeip 的行为差异 |
 | M4 | newosp 接入、ARM 实测、shell 命令 | 目标板与工具链可用性 |
 

@@ -16,8 +16,17 @@
 
 using osp::someip::BuildFindServiceDatagram;
 using osp::someip::BuildSubscribeEventGroupDatagram;
+using osp::someip::Header;
+using osp::someip::IncomingRequest;
 using osp::someip::Ipv4Endpoint;
+using osp::someip::Message;
+using osp::someip::MessageId;
 using osp::someip::MessageView;
+using osp::someip::MessageType;
+using osp::someip::MessageTypeField;
+using osp::someip::OpaquePayload;
+using osp::someip::RequestReply;
+using osp::someip::ReturnCode;
 using osp::someip::Server;
 using osp::someip::ServiceInstance;
 using osp::someip::SubscribeEventGroupRequest;
@@ -245,4 +254,84 @@ TEST_CASE("server - offers re-announce at half their ttl", "[server]") {
   REQUIRE(multicast == capture.Last().to);
   server.Tick(2500U);
   REQUIRE(2U == capture.count);
+}
+
+namespace {
+
+struct EchoHandler final {
+  std::uint32_t calls{0U};
+  std::uint16_t last_method{0U};
+
+  RequestReply OnRequest(const IncomingRequest& request) noexcept {
+    ++calls;
+    last_method = request.method_id;
+    RequestReply reply;
+    reply.handled = true;
+    if (0xBEEFU == request.method_id) {
+      reply.is_error = true;
+      reply.code = ReturnCode::UnknownMethod();
+    } else {
+      reply.payload = request.payload;
+    }
+    return reply;
+  }
+};
+
+std::uint32_t BuildRequest(std::uint8_t* out, std::uint16_t method_id,
+                           std::uint32_t request_id, MessageType type,
+                           osp::span<const std::uint8_t> payload) noexcept {
+  const Header header = Header::New(
+      MessageId::FromServiceAndMethod(0x1234U, method_id), request_id, 0x01U, 0x01U,
+      MessageTypeField::New(type, false), ReturnCode::Ok(),
+      static_cast<std::uint32_t>(payload.size()));
+  const Message<OpaquePayload> message(header, OpaquePayload(payload));
+  const auto written = message.EncodeTo(osp::make_span(out, 128U));
+  return written.has_value() ? written.value() : 0U;
+}
+
+}  // namespace
+
+TEST_CASE("server - requests are dispatched and answered", "[server][rpc]") {
+  Capture capture;
+  Server<Capture, 2U, 2U, 1400U, EchoHandler> server(capture);
+  const Ipv4Endpoint client{{127U, 0U, 0U, 2U}, 30510U};
+  const std::uint8_t payload[3] = {0x01U, 0x02U, 0x03U};
+
+  std::uint8_t request_bytes[128] = {};
+  const std::uint32_t request_size =
+      BuildRequest(request_bytes, 0x0001U, 0x00010007U, MessageType::kRequest,
+                   osp::make_span(payload));
+  REQUIRE(0U != request_size);
+  server.HandleDatagram(osp::make_span(request_bytes, request_size), client, 0U);
+
+  REQUIRE(1U == server.Handler().calls);
+  REQUIRE(0x0001U == server.Handler().last_method);
+  REQUIRE(client == capture.Last().to);
+
+  const auto response = MessageView::Parse(osp::make_span(capture.Last().bytes,
+                                                          capture.Last().size));
+  REQUIRE(response.has_value());
+  REQUIRE(MessageType::kResponse == response.value().Head().Type().Type());
+  REQUIRE(0x00010007U == response.value().Head().RequestId());
+  REQUIRE(3U == response.value().Body().size());
+  REQUIRE(0x03U == response.value().Body()[2]);
+  REQUIRE(ReturnCode::Ok() == response.value().Head().Code());
+
+  const std::uint32_t error_size =
+      BuildRequest(request_bytes, 0xBEEFU, 0x00010008U, MessageType::kRequest,
+                   osp::make_span(payload));
+  server.HandleDatagram(osp::make_span(request_bytes, error_size), client, 0U);
+  const auto error = MessageView::Parse(osp::make_span(capture.Last().bytes,
+                                                       capture.Last().size));
+  REQUIRE(error.has_value());
+  REQUIRE(MessageType::kError == error.value().Head().Type().Type());
+  REQUIRE(ReturnCode::UnknownMethod() == error.value().Head().Code());
+
+  const std::uint32_t before = capture.count;
+  const std::uint32_t fire_size =
+      BuildRequest(request_bytes, 0x0002U, 0x00010009U, MessageType::kRequestNoReturn,
+                   osp::make_span(payload));
+  server.HandleDatagram(osp::make_span(request_bytes, fire_size), client, 0U);
+  REQUIRE(before == capture.count);
+  REQUIRE(3U == server.Handler().calls);
 }

@@ -30,6 +30,31 @@
 
 namespace osp::someip {
 
+/// @brief One inbound RPC request handed to the server's request handler.
+struct IncomingRequest final {
+  std::uint32_t request_id{0U};
+  std::uint16_t service_id{0U};
+  std::uint16_t method_id{0U};
+  std::uint8_t interface_version{0U};
+  /// @brief Payload view; valid only for the duration of OnRequest().
+  osp::span<const std::uint8_t> payload{};
+  Ipv4Endpoint from{};
+};
+
+/// @brief What the handler wants the server to send back.
+struct RequestReply final {
+  bool handled{false};
+  bool is_error{false};
+  ReturnCode code{ReturnCode::Ok()};
+  /// @brief Payload view; the server encodes it before OnRequest() returns.
+  osp::span<const std::uint8_t> payload{};
+};
+
+/// @brief Default handler: every request is ignored.
+struct NoRequestHandler final {
+  RequestReply OnRequest(const IncomingRequest& /*request*/) noexcept { return RequestReply{}; }
+};
+
 /**
  * @brief SOME/IP service provider over caller-supplied transport and clock.
  *
@@ -39,9 +64,11 @@ namespace osp::someip {
  * @tparam MaxOffers     Offered service instances.
  * @tparam MaxSubscribers Concurrent event-group subscriptions.
  * @tparam MaxDatagram   Size of the scratch buffer used to build one datagram.
+ * @tparam RequestHandler Supplies `RequestReply OnRequest(const IncomingRequest&)`;
+ *                       it is held by value and reachable through Handler().
  */
 template <typename Sink, std::uint32_t MaxOffers = 8U, std::uint32_t MaxSubscribers = 16U,
-          std::uint32_t MaxDatagram = 1400U>
+          std::uint32_t MaxDatagram = 1400U, typename RequestHandler = NoRequestHandler>
 class Server final {
  public:
   /// @brief @p sink must outlive the server and must not store the byte view.
@@ -50,6 +77,9 @@ class Server final {
 
   Server(const Server&) = delete;
   Server& operator=(const Server&) = delete;
+
+  /// @brief Mutable access to the request handler (tests inspect its counters).
+  RequestHandler& Handler() noexcept { return handler_; }
 
   /// @brief Start offering a service and announce it once.
   bool Offer(const ServiceInstance& service, const Ipv4Endpoint& endpoint,
@@ -104,7 +134,14 @@ class Server final {
   void HandleDatagram(osp::span<const std::uint8_t> datagram, const Ipv4Endpoint& source,
                       std::uint32_t now_ms) noexcept {
     const auto message = MessageView::Parse(datagram);
-    if (!message.has_value() || !message.value().IsSd()) {
+    if (!message.has_value()) {
+      return;
+    }
+    if (!message.value().IsSd()) {
+      const MessageType type = message.value().Head().Type().Type();
+      if (MessageType::kRequest == type || MessageType::kRequestNoReturn == type) {
+        HandleRequest(message.value(), source);
+      }
       return;
     }
     auto sd_header = message.value().SdHeader();
@@ -208,6 +245,37 @@ class Server final {
       }
     }
     return nullptr;
+  }
+
+  void HandleRequest(MessageView message, const Ipv4Endpoint& source) noexcept {
+    const HeaderView head = message.Head();
+    IncomingRequest request;
+    request.request_id = head.RequestId();
+    request.service_id = head.Id().ServiceId();
+    request.method_id = head.Id().MethodId();
+    request.interface_version = head.InterfaceVersion();
+    request.payload = message.Body();
+    request.from = source;
+    const RequestReply reply = handler_.OnRequest(request);
+    if (!reply.handled || MessageType::kRequestNoReturn == head.Type().Type()) {
+      return;
+    }
+    SendReply(head, reply, source);
+  }
+
+  void SendReply(const HeaderView& request, const RequestReply& reply,
+                 const Ipv4Endpoint& to) noexcept {
+    const Header header = Header::New(
+        request.Id(), request.RequestId(), request.ProtocolVersion(),
+        request.InterfaceVersion(),
+        MessageTypeField::New(
+            reply.is_error ? MessageType::kError : MessageType::kResponse, false),
+        reply.code, static_cast<std::uint32_t>(reply.payload.size()));
+    const Message<OpaquePayload> message(header, OpaquePayload(reply.payload));
+    const auto written = message.EncodeTo(osp::make_span(buffer_));
+    if (written.has_value()) {
+      sink_(osp::span<const std::uint8_t>(buffer_, written.value()), to);
+    }
   }
 
   void HandleSd(sd::SdHeaderView& sd_header, const Ipv4Endpoint& source,
@@ -364,6 +432,7 @@ class Server final {
 
   Sink& sink_;
   Ipv4Endpoint sd_multicast_{};
+  RequestHandler handler_{};
   OfferSlot offers_[MaxOffers]{};
   SubscriberSlot subscribers_[MaxSubscribers]{};
   sd::SdSessionCounter session_ = sd::SdSessionCounter::New();
