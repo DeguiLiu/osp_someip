@@ -28,7 +28,8 @@ clang-tidy tests/header_smoke.cpp -checks='-*,performance-*' \
 
 ## 3. 接受的偏差
 
-`bugprone-easily-swappable-parameters` 仍会报告若干函数，例如：
+`bugprone-easily-swappable-parameters` 仍是唯一一类报告，当前 11 条（加入 TP 与 E2E Profile 1
+后没有新增检查类别）。例如：
 
 - `Header::New(message_id, request_id, protocol_version, interface_version, ...)`
 - `Client::Publish(service, event_group_id, event_id, payload, ...)`
@@ -36,7 +37,7 @@ clang-tidy tests/header_smoke.cpp -checks='-*,performance-*' \
 
 理由：这些参数是协议字段，调用点均以命名变量传入；要彻底消除需要为每个字段引入
 `NewType`，会让 API 与 Rust 原型明显分叉。若后续引入严格 MISRA 审计，再按字段逐个
-强类型化。
+强类型化。`performance-*` 当前 0 条。
 
 ## 4. 与编译告警的关系
 

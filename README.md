@@ -6,11 +6,14 @@ SOME/IP 协议栈，C++17 头文件库，面向嵌入式 Linux 与 RT-Thread，�
 [newosp](https://github.com/DeguiLiu/newosp)。包含线格式、Service Discovery、服务端和客户端，
 不包含 socket 与线程：收发和时钟由调用方注入，可以接进已有的事件循环或 RTOS 任务。
 
-目前完成 M0–M3。目标板数据和第三方互操作尚未执行，见“状态与限制”。
+目前完成 M0–M3，并补上 SOME/IP-TP 重组与 E2E Profile 1。真机与第三方互操作的情况见
+“状态与限制”。
 
 ## 能力
 
-- 线格式：16 字节 SOMF 头、消息编解码、数据报遍历。SOME/IP-TP 分段跳过并计数，不做重组。
+- 线格式：16 字节 SOMF 头、消息编解码、数据报遍历。
+- SOME/IP-TP：分段头编解码与定容重组，按（消息 ID，请求 ID）区分会话，按超时丢弃；
+  不启用时不占内存。
 - Service Discovery：entry / option / header 编解码与零拷贝视图；Find、Offer、StopOffer、
   Subscribe、Ack 数据报构建；会话计数。
 - 服务端：offer 槽表、find 应答（支持通配）、订阅管理、事件发布、TTL 到期与 TTL/2 重播、
@@ -20,6 +23,7 @@ SOME/IP 协议栈，C++17 头文件库，面向嵌入式 Linux 与 RT-Thread，�
 - RPC：`RequestHandler` 在编译期绑定，同步分发请求，自动回 Response 或 Error，支持
   fire-and-forget。
 - E2E：策略模板，发送前 Protect、接收时 Check，校验失败丢弃；默认 `NoE2E`，不产生开销。
+  内置 Profile 1（CRC-8 SAE J1850 + 4 位计数器 + 数据 ID）。
 - 内存：容器容量由模板参数给定，解析结果是调用方缓冲区上的视图，全链路不分配堆内存。
 - 构建：`-fno-exceptions -fno-rtti` 下可用。
 
@@ -39,9 +43,11 @@ cmake --build --preset host-debug -j8
 ctest --preset host-debug
 ```
 
-主机上 102 个用例、3710 条断言通过；`noexc` 与 ASan + UBSan 两组构建另行跑通。
-x86 回环 3000 次 RPC 往返，p50 5 µs、p99 9–12 µs，约 16 万次请求/秒，
-数据来自 `docs/benchmark_report_zh.md`，不代表目标板。
+主机上 114 个用例、3826 条断言通过；`noexc` 与 ASan + UBSan 两组构建另行跑通。
+aarch64 交叉构建后在 qemu 下 113 过、1 跳过（组播用例需要真机网卡）。
+x86 回环 3000 次 RPC 往返，p50 5 µs、p99 9–12 µs，约 16 万次请求/秒；
+aarch64（qemu）同一基准 p50 11 µs、p99 24 µs，约 6.6 万次请求/秒。
+数据来自 `docs/benchmark_report_zh.md`。
 
 ## 接入方式
 
@@ -134,6 +140,8 @@ include/osp/someip/
   client.hpp       客户端
   udp_link.hpp     newosp UDP 套接字适配
   e2e.hpp          E2E 策略钩子
+  e2e_profile1.hpp E2E Profile 1
+  tp.hpp           SOME/IP-TP 分段与重组
 examples/          服务端、客户端、回环基准
 tests/             Catch2 测试，含手写线格式 golden
 docs/              设计、验证、基准、静态分析文档
@@ -141,11 +149,12 @@ docs/              设计、验证、基准、静态分析文档
 
 ## 状态与限制
 
-- 未做 ARM 交叉构建与目标板实测，现有性能数据全部来自 x86 主机回环。
-- 未做 vsomeip 互操作。操作步骤写在 `docs/validation_lanes_zh.md`，需要 Docker 环境。
-- 组播加入已实现并有示例，真实网卡与 IGMP 环境下尚未验证。
-- SOME/IP-TP 只跳过不重组；E2E 只有钩子，没有内置 AUTOSAR profile。
-- 仓库暂无 LICENSE 文件，许可证待定。参考实现只用于核对行为，不复制其代码。
+- ARM：已用 aarch64 交叉工具链构建并通过 qemu 运行，无目标板实测数据。
+- 组播：已在真实网卡（`ens192`）上验证入组与接收，未与外部节点做过跨越交换机的对测。
+- vsomeip 互操作未执行。本机 Docker 需要加入 docker 组，步骤见
+  `docs/validation_lanes_zh.md`。
+- SOME/IP-TP 按序重组，乱序分段直接丢弃；E2E 只带 Profile 1，没有 Profile 2/4/5/7。
+- 参考实现只用于核对行为，不复制其代码。
 
 ## 文档
 
@@ -159,3 +168,7 @@ docs/              设计、验证、基准、静态分析文档
 | [docs/reference_projects_zh.md](docs/reference_projects_zh.md) | 参考实现与互操作对端清单 |
 
 环境自检：`./tools/verify_env.sh`。
+
+## 许可证
+
+MIT，见 [LICENSE](LICENSE)。

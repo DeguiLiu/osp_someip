@@ -7,13 +7,14 @@ A SOME/IP stack for embedded Linux and RT-Thread, written as a C++17 header-only
 server side and the client side. Sockets and threads are not part of the library: the caller
 supplies send, receive and time, so the core runs inside an existing event loop or RTOS task.
 
-Scope today is M0-M3. Target-board numbers and third-party interop have not been run yet; see
-"Status and limits".
+Scope today is M0-M3 plus SOME/IP-TP reassembly and E2E Profile 1. Board-level numbers and
+third-party interop are covered in "Status and limits".
 
 ## Features
 
-- Wire format: 16-byte SOMF header, message encode/decode, datagram walker. SOME/IP-TP segments are
-  skipped and counted, not reassembled.
+- Wire format: 16-byte SOMF header, message encode/decode, datagram walker.
+- SOME/IP-TP: segment header codec and fixed-capacity reassembly, keyed by (message ID, request ID)
+  with a timeout; it costs no memory unless enabled.
 - Service Discovery: entry / option / header codecs with zero-copy views; builders for Find, Offer,
   StopOffer, Subscribe and Ack; session counter.
 - Server: offer table, find replies (wildcards included), subscription management, event publishing,
@@ -23,7 +24,7 @@ Scope today is M0-M3. Target-board numbers and third-party interop have not been
 - RPC: `RequestHandler` is bound at compile time; requests are dispatched synchronously and answered
   with a Response or an Error. Fire-and-forget calls are supported.
 - E2E: policy template with Protect on send and Check on receive; failed checks drop the message.
-  The default `NoE2E` costs nothing.
+  The default `NoE2E` costs nothing; Profile 1 (CRC-8 SAE J1850, 4-bit counter, data ID) is built in.
 - Memory: capacities are template parameters, parse results are views over caller-owned buffers, and
   the whole path avoids heap allocation.
 - Builds with `-fno-exceptions -fno-rtti`.
@@ -44,10 +45,11 @@ cmake --build --preset host-debug -j8
 ctest --preset host-debug
 ```
 
-On the host, 102 test cases with 3710 assertions pass; the `noexc` and ASan + UBSan builds pass
-separately. A 3000-round-trip RPC benchmark over loopback gives p50 5 us and p99 9-12 us, about
-160k requests per second on x86. Those numbers come from `docs/benchmark_report_zh.md` and say
-nothing about the target board.
+On the host, 114 test cases with 3826 assertions pass; the `noexc` and ASan + UBSan builds pass
+separately. An aarch64 cross build runs 113 cases under qemu with one skip, the multicast case that
+needs a real NIC. A 3000-round-trip RPC benchmark over loopback gives p50 5 us and p99 9-12 us,
+about 160k requests per second on x86, and p50 11 us with p99 24 us, about 66k requests per second,
+on aarch64 under qemu. See `docs/benchmark_report_zh.md`.
 
 ## Using the API
 
@@ -143,6 +145,8 @@ include/osp/someip/
   client.hpp        service consumer
   udp_link.hpp      newosp UDP socket adapters
   e2e.hpp           E2E policy hook
+  e2e_profile1.hpp  E2E Profile 1
+  tp.hpp            SOME/IP-TP segmentation and reassembly
 examples/           server, client, loopback benchmark
 tests/              Catch2 tests with hand-written wire goldens
 docs/               design, validation, benchmark and static-analysis notes
@@ -150,12 +154,13 @@ docs/               design, validation, benchmark and static-analysis notes
 
 ## Status and limits
 
-- No ARM cross build or target-board measurement yet. All performance data is from an x86 loopback.
-- No vsomeip interop run yet. The procedure is in `docs/validation_lanes_zh.md` and needs Docker.
-- Multicast join is implemented and exercised by the example, but not verified on a real NIC with
-  IGMP.
-- SOME/IP-TP is skipped, not reassembled. E2E provides the hook only; no AUTOSAR profile is bundled.
-- The repository has no LICENSE file yet.
+- ARM: cross-built with an aarch64 toolchain and exercised under qemu; no target-board data yet.
+- Multicast: join and receive verified on a real NIC (`ens192`), not against an external node across
+  a switch.
+- vsomeip interop has not been run. The host needs docker group membership; the procedure is in
+  `docs/validation_lanes_zh.md`.
+- SOME/IP-TP reassembly expects in-order segments and drops out-of-order ones. E2E ships Profile 1
+  only, not Profile 2/4/5/7.
 
 ## Documentation
 
@@ -171,3 +176,7 @@ The design notes are written in Chinese.
 | [docs/reference_projects_zh.md](docs/reference_projects_zh.md) | Reference implementations and interop peers |
 
 Environment check: `./tools/verify_env.sh`.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

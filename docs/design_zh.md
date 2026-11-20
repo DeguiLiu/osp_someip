@@ -8,8 +8,10 @@
 
 | 范围内 | 范围外 |
 |---|---|
-| SOME/IP 头、消息、SD entry/option 编解码 | SOME/IP-TP 重组（仅跳过并计数） |
-| 服务端 offer/stop-offer、事件发布、订阅管理 | E2E 保护的具体 profile（只留钩子） |
+| SOME/IP 头、消息、SD entry/option 编解码 | E2E Profile 2/4/5/7 |
+| SOME/IP-TP 分段头与定容重组 | SOME/IP-TP 乱序重组（只接受按序到达） |
+| 服务端 offer/stop-offer、事件发布、订阅管理 | mTLS 与安全传输 |
+| E2E 钩子与 Profile 1（CRC-8 + 计数器） | 动态分配、vtable 多态、工厂模式 |
 | 客户端发现缓存、订阅、请求-响应匹配 | TLS/mTLS 与安全传输 |
 | 定容、零分配、无异常的错误模型 | 动态分配、vtable 多态、工厂模式 |
 
@@ -48,8 +50,9 @@ flowchart TB
 模块职责：`protocol` 只做字节与值对象，不碰 socket；`sd_codec` 在调用方缓冲上构建整条 SD 数据报；
 `server` 与 `client` 持有定容状态表，通过 `TransportOps` 策略注入收发；应用层只组合，不解析字节。
 
-当前已落地 M0 的文件：`wire.hpp`（写入器与编码器骨架）、`header.hpp`、`message.hpp`、
-`payload.hpp`、`message_id.hpp`、`message_type.hpp`、`return_code.hpp`、`error.hpp`。
+线格式在 `wire.hpp`（写入器与编码器骨架）、`header.hpp`、`message.hpp`、`payload.hpp`、
+`message_id.hpp`、`message_type.hpp`、`return_code.hpp`、`error.hpp`；上层在 `tp.hpp`、
+`e2e.hpp`、`e2e_profile1.hpp`、`sd_codec.hpp`、`server.hpp`、`client.hpp`。
 
 ## 3. 关键设计决策
 
@@ -133,12 +136,6 @@ Subscribe 带上本地端点选项，Ack/Nack 通过 `OnSubscribeAck` 上报授�
 对端重启检测按 SD 源地址记录会话号：若新报文带 RecentlyRebooted 且会话号不增，
 判定对端重启，清除该源的服务缓存与订阅并回调 `OnSenderRebooted`。
 
-### 3.11 服务端远端观察者
-
-`Server` 额外接收其他节点的 Offer/StopOffer：远端服务表定容保存服务标识、端点与到期时刻，
-首次出现回调 `OnServiceAvailable`，stop-offer 或 TTL 到期回调 `OnServiceGone`。
-与本节点自身 offer 相同的公告会被忽略，避免组播回环把本机误判成远端。
-
 ### 3.9 服务端请求分发
 
 `Server` 的第五个模板参数是 `RequestHandler`，默认 `NoRequestHandler` 忽略所有请求。
@@ -146,14 +143,37 @@ Subscribe 带上本地端点选项，Ack/Nack 通过 `OnSubscribeAck` 上报授�
 payload / 源端点` 组一个 `IncomingRequest` 交给 `OnRequest`；处理器返回 `RequestReply`，
 服务端据此自动编码 Response 或 Error 并回给源端点。fire-and-forget 只分发不回复。
 处理器在编译期绑定、按值持有（`Handler()` 可取回状态），无堆、无虚函数。
+回复同样经过 E2E `Protect`，保证请求与响应共用一套保护策略。
 
-### 3.10 E2E 钩子
+### 3.10 服务端远端观察者
+
+`Server` 额外接收其他节点的 Offer/StopOffer：远端服务表定容保存服务标识、端点与到期时刻，
+首次出现回调 `OnServiceAvailable`，stop-offer 或 TTL 到期回调 `OnServiceGone`。
+与本节点自身 offer 相同的公告会被忽略，避免组播回环把本机误判成远端。
+
+### 3.11 E2E 钩子
 
 `Server` 与 `Client` 都接受一个 `E2E` 策略模板参数，默认 `NoE2E`（检查不适用、保护原样返回）。
-发送路径（服务端 Publish、客户端 Request）先把载荷写入缓冲区头部之后，取临时头的
+发送路径（服务端 Publish 与回复、客户端 Request）先把载荷写入缓冲区头部之后，取临时头的
 `upper_header` 调 `Protect`，按要求调整后的长度重建头并发送；接收路径先 `Check`，
 判定失败直接丢弃，通过后把去掉保护尾的载荷视图交给处理器。策略在编译期绑定，
 未启用时没有分支残留。
+
+### 3.12 内置 Profile 1
+
+`E2EProfile1<DataId>` 实现 AUTOSAR Profile 1 的线格式：保护载荷前两个字节是计数器和 CRC，
+CRC-8 采用 SAE J1850 参数（poly 0x1D、init 0xFF、终值异或 0xFF），覆盖 16 位数据 ID、
+计数器、置零的 CRC 字节和后续数据。`Protect` 先用 `memmove` 把载荷后移两个字节再写头，
+因此调用方必须预留两字节空间；`Check` 校验 CRC 并比较计数器，重复计数按重放处理。
+
+### 3.13 SOME/IP-TP 重组
+
+`TpHeader` 解析四字节分段头：28 位偏移以 16 字节为单位，低 1 位为 more 标志，保留位非零即拒绝。
+`TpReassembly<MaxPayload, MaxSessions, TimeoutMs>` 按（消息 ID，请求 ID）找槽位，
+要求分段严格按序到达，偏移与已收字节不一致时丢弃整条组装；超时未收到新分段同样丢弃。
+重组完成后在现场缓冲区头部重建一个去掉 TP 标志的 16 字节头，返回 `MessageView`，
+因此上层的 E2E 检查、RPC 分发和 SD 解析都无需区分是否经过分段。
+策略默认 `NoTpReassembly`，不占内存；容量按 `MaxSessions * (MaxPayload + 16)` 计算。
 
 ## 4. 验证策略
 
@@ -164,8 +184,9 @@ payload / 源端点` 组一个 `IncomingRequest` 交给 `OnRequest`；处理器�
 | L2 互操作 | 与 vsomeip 容器对端做 RPC、通知、订阅 | 双向收发一致 |
 | L3 目标 | ARM Linux / RT-Thread 构建与静态内存报告 | 无堆、尺寸达标 |
 
-当前 L0 结果：102 个用例、3710 条断言（含 3000 轮确定性变异扫描），外加零分配见证进程；
-普通构建、`-fno-exceptions -fno-rtti` 构建与 ASan+UBSan 构建均通过。
+当前 L0/L1 结果：114 个用例、3826 条断言（含 3000 轮确定性变异扫描），外加零分配见证进程；
+普通构建、`-fno-exceptions -fno-rtti` 构建与 ASan+UBSan 构建均通过。L2 的组播在真实网卡
+（`ens192`）上验证；L3 完成 aarch64 交叉构建与 qemu 运行，113 过、1 跳过。
 
 ## 5. 里程碑与风险
 
@@ -175,7 +196,7 @@ payload / 源端点` 组一个 `IncomingRequest` 交给 `OnRequest`；处理器�
 | M1（完成） | SD entry/option/header 编解码、零拷贝解析、数据报构建器 | option 长度与 entry 计数边界 |
 | M2（核心完成） | 服务端 offer/stop-offer、find 应答、订阅槽表、事件发布、RPC 分发、TTL 与重播 | 订阅 TTL 与重播时序 |
 | M3（核心完成） | 客户端发现、RPC 匹配、超时、事件回调 | 与 vsomeip 的行为差异 |
-| M4 | newosp 接入、ARM 实测、shell 命令 | 目标板与工具链可用性 |
+| M4（部分完成） | aarch64 交叉构建与 qemu 实测、组播真机验证 | 目标板数据、vsomeip 互操作 |
 
 主要风险有三个：一是 SD 时序（offer 重播、TTL 过期）只能靠互操作暴露；
 二是 `-Wconversion` 下的大量窄化需要逐处显式转换；三是目标板性能数据不能由 x86 结果外推。
