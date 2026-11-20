@@ -77,6 +77,16 @@ cmake --build build-demo -j8
 `0x00010001`（4 字节回显）、每秒收到一条 4 字节事件；服务端显示请求日志与
 `1 subscriber(s)`。
 
+独立探针（第二套实现，仅用 Python 标准库收发原始报文）：
+
+```bash
+python3 tools/sd_probe.py --server 127.0.0.1 --service 1234 --method 0001
+```
+
+实测：`offer ... endpoint=('127.0.0.1', 30509)`、`subscribe ack granted ttl=10`、
+`response ... payload=11223344`，并连续收到 `event method=0x8001`。这条链路证明 C++ 编解码
+与一份独立实现的字节构造完全一致。
+
 newosp 头文件默认取 `../newosp/include`，可用 `-DOSP_INCLUDE_DIR=<path>` 覆盖。
 
 ## 设计要点

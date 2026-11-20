@@ -52,7 +52,7 @@ SD 编解码、服务端与客户端核心；尚未覆盖 SOME/IP-TP 重组、E2
 | 单元/集成测试 | 824 个 `#[test]` 标注 | 99 个用例、3691 条断言（含变异扫描） |
 | 线格式 golden | 19 条手写字面量 | 19 条同源字面量（逐字节移植） |
 | 无分配 | `no_alloc_witness` 测试 | `someip_no_alloc` 进程，覆盖 server + client |
-| 真实网络 | tokio + vsomeip 容器互操作 | 真实 UDP 环回用例 + 两个进程的 server/client demo 实测 |
+| 真实网络 | tokio + vsomeip 容器互操作 | 真实 UDP 环回用例 + 双进程 demo + 独立 Python 探针互通 |
 | 异常/panic 关闭 | `panic = abort`、no_std | `-fno-exceptions -fno-rtti` 全量构建 |
 | Sanitizer | Miri / fuzz（CI） | ASan + UBSan 全量通过 |
 

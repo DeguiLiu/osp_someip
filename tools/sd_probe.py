@@ -1,0 +1,195 @@
+#!/usr/bin/env python3
+"""Independent SOME/IP-SD probe: find, subscribe, request, listen.
+
+This is a second implementation of the wire format on purpose: running it
+against examples/someip_server_demo proves the C++ encoder and decoder agree
+with bytes produced by unrelated code, without needing vsomeip or Docker.
+
+Usage:
+  tools/sd_probe.py --server 127.0.0.1 --service 1234 --method 0001
+"""
+
+import argparse
+import socket
+import struct
+import time
+
+SD_PORT = 30490
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--server", default="127.0.0.1")
+    parser.add_argument("--local", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=30510)
+    parser.add_argument("--service", type=lambda v: int(v, 16), default=0x1234)
+    parser.add_argument("--instance", type=lambda v: int(v, 16), default=0x0001)
+    parser.add_argument("--major", type=int, default=1)
+    parser.add_argument("--eventgroup", type=lambda v: int(v, 16), default=0x0001)
+    parser.add_argument("--method", type=lambda v: int(v, 16), default=0x0001)
+    parser.add_argument("--ttl", type=int, default=10)
+    parser.add_argument("--seconds", type=float, default=3.0)
+    parser.add_argument("--skip-request", action="store_true")
+    return parser.parse_args()
+
+
+def someip_header(message_id, length, request_id, message_type=0x00, return_code=0x00):
+    return struct.pack(
+        ">IIIBBBB", message_id, length, request_id, 0x01, 0x01, message_type, return_code
+    )
+
+
+def ipv4_option(ip, port, protocol=0x11):
+    payload = socket.inet_aton(ip) + b"\x00" + bytes([protocol]) + struct.pack(">H", port)
+    # The length field counts the discard byte and the payload, not itself
+    # nor the type byte.
+    return struct.pack(">HBB", len(payload) + 1, 0x04, 0x00) + payload
+
+
+def sd_message(entries, options, request_id):
+    body = (
+        struct.pack(">BBBB", 0x40, 0, 0, 0)
+        + struct.pack(">I", 16 * len(entries))
+        + b"".join(entries)
+        + struct.pack(">I", len(options))
+        + options
+    )
+    return someip_header(0xFFFF8100, 8 + len(body), request_id, 0x02, 0x00) + body
+
+
+def find_datagram(service_id, request_id):
+    entry = struct.pack(
+        ">BBBBHHB3sI",
+        0x00,
+        0,
+        0,
+        0x10,
+        service_id,
+        0xFFFF,
+        0xFF,
+        b"\xFF\xFF\xFF",
+        0xFFFFFFFF,
+    )
+    return sd_message([entry], b"", request_id)
+
+
+def subscribe_datagram(args, request_id):
+    entry = struct.pack(
+        ">BBBBHHB3sHH",
+        0x06,
+        0,
+        0,
+        0x10,
+        args.service,
+        args.instance,
+        args.major,
+        args.ttl.to_bytes(3, "big"),
+        0,
+        args.eventgroup,
+    )
+    return sd_message([entry], ipv4_option(args.local, args.port), request_id)
+
+
+def parse_sd(datagram):
+    """Return (flags, entries, options) for one SD datagram."""
+    if len(datagram) < 28:
+        raise ValueError("short SD datagram")
+    flags = datagram[16]
+    entries_size = struct.unpack(">I", datagram[20:24])[0]
+    entries = [
+        datagram[24 + offset : 24 + offset + 16] for offset in range(0, entries_size, 16)
+    ]
+    options_at = 24 + entries_size
+    options_size = struct.unpack(">I", datagram[options_at : options_at + 4])[0]
+    return flags, entries, datagram[options_at + 4 : options_at + 4 + options_size]
+
+
+def parse_options(options):
+    parsed = []
+    offset = 0
+    while offset + 4 <= len(options):
+        length = struct.unpack(">H", options[offset : offset + 2])[0]
+        wire = length + 3
+        option_type = options[offset + 2]
+        if option_type == 0x04:
+            address = socket.inet_ntoa(options[offset + 4 : offset + 8])
+            port = struct.unpack(">H", options[offset + 10 : offset + 12])[0]
+            parsed.append(("ipv4", address, port))
+        offset += wire
+    return parsed
+
+
+def main():
+    args = parse_args()
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(("0.0.0.0", args.port))
+    sock.settimeout(0.5)
+    server = (args.server, SD_PORT)
+
+    sock.sendto(find_datagram(args.service, 1), server)
+    print("find sent")
+
+    service_endpoint = None
+    deadline = time.monotonic() + args.seconds
+    subscribed = False
+    request_sent = False
+    request_id = 0x00010001
+
+    while time.monotonic() < deadline:
+        try:
+            datagram, source = sock.recvfrom(2048)
+        except socket.timeout:
+            continue
+        if len(datagram) < 16:
+            continue
+        message_id = struct.unpack(">I", datagram[0:4])[0]
+        message_type = datagram[14]
+
+        if message_id == 0xFFFF8100:
+            flags, entries, options = parse_sd(datagram)
+            for entry in entries:
+                entry_type = entry[0]
+                service = struct.unpack(">H", entry[4:6])[0]
+                instance = struct.unpack(">H", entry[6:8])[0]
+                if entry_type == 0x01 and service == args.service:
+                    endpoints = parse_options(options)
+                    service_endpoint = endpoints[0][1:] if endpoints else source
+                    print(
+                        f"offer service=0x{service:04X} instance=0x{instance:04X} "
+                        f"endpoint={service_endpoint} flags=0x{flags:02X}"
+                    )
+                    if not subscribed:
+                        sock.sendto(subscribe_datagram(args, 2), source)
+                        subscribed = True
+                        print("subscribe sent")
+                elif entry_type == 0x07:
+                    granted = int.from_bytes(entry[9:12], "big")
+                    print(f"subscribe ack granted ttl={granted}")
+                    if granted and not args.skip_request and not request_sent:
+                        body = struct.pack(">I", 0x11223344)
+                        header = someip_header(
+                            (args.service << 16) | args.method,
+                            8 + len(body),
+                            request_id,
+                        )
+                        sock.sendto(header + body, (service_endpoint[0], service_endpoint[1]))
+                        request_sent = True
+                        print("request sent")
+        elif message_type == 0x80:
+            payload = datagram[16:]
+            print(
+                f"response request_id=0x{struct.unpack('>I', datagram[8:12])[0]:08X} "
+                f"payload={payload.hex()}"
+            )
+        elif message_type == 0x02:
+            payload = datagram[16:]
+            print(
+                f"event method=0x{message_id & 0xFFFF:04X} payload={payload.hex()}"
+            )
+
+    print("done")
+
+
+if __name__ == "__main__":
+    main()
