@@ -49,7 +49,7 @@ SOME/IP-TP 重组、E2E Profile 1、真实网卡组播与 vsomeip 双向互操�
 
 | 项 | Rust | 本项目 |
 |---|---|---|
-| 单元/集成测试 | 540 个 `#[test]` + 285 个 `#[tokio::test]` | 118 个用例、3846 条断言（含变异扫描） |
+| 单元/集成测试 | 540 个 `#[test]` + 285 个 `#[tokio::test]` | 119 个用例、12716 条断言（含变异扫描） |
 | 线格式 golden | 19 条手写字面量 | 19 条同源字面量（逐字节移植） |
 | 无分配 | `no_alloc_witness` 测试 | `someip_no_alloc` 进程，覆盖 server + client |
 | 真实网络 | tokio + vsomeip 容器互操作 | 真实 UDP 用例 + 双进程 demo + Python 探针 + vsomeip 双向互操作 |

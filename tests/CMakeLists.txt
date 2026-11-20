@@ -42,6 +42,7 @@ add_executable(someip_tests
     test_header.cpp
     test_message.cpp
     test_tp.cpp
+    test_tp_fuzz.cpp
     test_wire_golden.cpp
     test_sd_entry.cpp
     test_sd_options.cpp
