@@ -56,6 +56,7 @@ SD 编解码、服务端与客户端核心；尚未覆盖 SOME/IP-TP 重组、E2
 | 真实网络 | tokio + vsomeip 容器互操作 | 真实 UDP 环回用例 + 双进程 demo + 独立 Python 探针互通 |
 | 异常/panic 关闭 | `panic = abort`、no_std | `-fno-exceptions -fno-rtti` 全量构建 |
 | Sanitizer | Miri / fuzz（CI） | ASan + UBSan 全量通过 |
+| 性能基线 | 未给出固定数字 | 回环 3000 RTT：p50 5 µs、p99 9–12 µs、约 16 万 req/s |
 
 ## 5. 已知差距与补齐顺序
 

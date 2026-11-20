@@ -3,3 +3,6 @@ target_link_libraries(someip_server_demo PRIVATE osp_someip)
 
 add_executable(someip_client_demo client_demo.cpp)
 target_link_libraries(someip_client_demo PRIVATE osp_someip)
+
+add_executable(someip_loopback_bench loopback_bench.cpp)
+target_link_libraries(someip_loopback_bench PRIVATE osp_someip)
