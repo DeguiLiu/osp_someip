@@ -1,9 +1,9 @@
 # osp-someip
 
 面向嵌入式 Linux 与 RT-Thread 的 SOME/IP 协议栈，C++17 头文件库，基于 newosp 框架。
-当前完成 M0–M2 核心：SOME/IP 线格式、消息遍历、Service Discovery 编解码与零拷贝解析、
-数据报构建器，以及不依赖 socket 的服务端（offer 重播、订阅管理、事件发布）。
-客户端与真实网卡接入为下一阶段。
+当前完成 M0–M3 核心：SOME/IP 线格式、消息遍历、Service Discovery 编解码与零拷贝解析、
+数据报构建器、不依赖 socket 的服务端（offer 重播、订阅管理、事件发布）与客户端
+（发现缓存、find 重发、请求匹配、超时与事件分发）。
 
 ## 结论先行
 
@@ -15,8 +15,9 @@
 | 线格式 | Header / Message / Opaque payload 已实现（M0） |
 | Service Discovery | entry / option / header 编解码、数据报构建器、零拷贝解析（M1） |
 | 服务端 | offer/stop-offer、find 应答、订阅槽表、事件发布、TTL 到期与 offer 重播（M2） |
+| 客户端 | 发现缓存、find 按倍增间隔重发、请求/响应匹配、超时、事件回调（M3） |
 | 零堆 | 全局 `operator new` 计数见证进程，完整场景 0 次分配 |
-| 测试 | 81 个用例、1241 条断言，含真实 UDP 环回用例；普通构建与无异常构建均通过 |
+| 测试 | 86 个用例、1287 条断言，含真实 UDP 环回用例；普通构建与无异常构建均通过 |
 
 ## 目录结构
 
@@ -33,6 +34,7 @@ include/osp/someip/
   sd/                 SD 类型、entry/option 编解码与视图、header、会话计数
   sd_codec.hpp        Offer / StopOffer / Subscribe / Ack 数据报构建器
   server.hpp          服务端：offer 槽表、订阅槽表、事件发布（模板容量）
+  client.hpp          客户端：发现缓存、find 重发、请求匹配、超时
   endpoint.hpp        IPv4 端点与 SD 组播默认值
   service_instance.hpp 服务标识（service / instance / major）
 tests/                Catch2 测试，含手工推导的线格式 golden

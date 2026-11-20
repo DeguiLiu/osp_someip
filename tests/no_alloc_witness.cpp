@@ -8,6 +8,7 @@
  * the hot path fails this test instead of silently shipping.
  */
 
+#include "osp/someip/client.hpp"
 #include "osp/someip/sd_codec.hpp"
 #include "osp/someip/server.hpp"
 
@@ -29,6 +30,18 @@ struct Sink final {
     ++datagrams;
     last_to = to;
   }
+};
+
+struct NullHandler final {
+  std::uint32_t responses{0U};
+
+  void OnResponse(std::uint32_t /*request_id*/, osp::someip::MessageView /*message*/) noexcept {
+    ++responses;
+  }
+  void OnEvent(osp::someip::MessageView /*message*/) noexcept {}
+  void OnTimeout(std::uint32_t /*request_id*/) noexcept {}
+  void OnSubscribeAck(std::uint16_t /*service_id*/, std::uint16_t /*instance_id*/,
+                      std::uint16_t /*event_group_id*/, std::uint32_t /*granted*/) noexcept {}
 };
 
 }  // namespace
@@ -93,6 +106,11 @@ int main() {
 
   server.Tick(1000U);
   ok = ok && 4U == sink.datagrams;
+
+  NullHandler handler;
+  const osp::someip::Ipv4Endpoint local{{127U, 0U, 0U, 3U}, 30511U};
+  osp::someip::Client<Sink, NullHandler, 2U, 2U> someip_client{sink, handler, local};
+  ok = ok && someip_client.StartFind(0x1234U, 0U);
 
   return (ok && 0U == g_allocations) ? 0 : 1;
 }

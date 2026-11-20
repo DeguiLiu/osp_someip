@@ -112,6 +112,15 @@ placement new（`vocabulary.hpp`）；本仓库不直接使用 `new`、`delete`�
 `Ipv4Endpoint` 再交给 `Server::HandleDatagram`。`tests/test_udp_loopback.cpp` 用真实 UDP 套接字在
 127.0.0.1 上跑通 find → offer → subscribe → ack → notification 全链路，不依赖 Docker 与组播。
 
+### 3.8 客户端核心
+
+`Client<Sink, Handler, MaxServices, MaxPending>` 与服务端对称：发送通道与回调都在编译期绑定，
+状态是定容数组。发现缓存保存 offer 的 service/instance/major、事件端点与 SD 源地址；
+`StartFind` 立即发一次后按 100 ms 起、逐次倍增的间隔重发三次；`Request` 用
+`client_id(1) << 16 | session` 生成请求 ID 并登记超时；收到的 Response/Error 按请求 ID
+匹配后回调 `OnResponse`，`Tick` 到期回调 `OnTimeout`；Notification 直接回调 `OnEvent`；
+Subscribe 带上本地端点选项，Ack/Nack 通过 `OnSubscribeAck` 上报授予的 TTL。
+
 ## 4. 验证策略
 
 | 层级 | 内容 | 判定 |
@@ -121,7 +130,7 @@ placement new（`vocabulary.hpp`）；本仓库不直接使用 `new`、`delete`�
 | L2 互操作 | 与 vsomeip 容器对端做 RPC、通知、订阅 | 双向收发一致 |
 | L3 目标 | ARM Linux / RT-Thread 构建与静态内存报告 | 无堆、尺寸达标 |
 
-当前 L0 结果：81 个用例、1241 条断言，外加零分配见证进程；普通构建与
+当前 L0 结果：86 个用例、1287 条断言，外加零分配见证进程；普通构建与
 `-fno-exceptions -fno-rtti` 构建均通过。
 
 ## 5. 里程碑与风险
@@ -131,7 +140,7 @@ placement new（`vocabulary.hpp`）；本仓库不直接使用 `new`、`delete`�
 | M0（完成） | header/message/walker + 3 条 golden | 无 |
 | M1（完成） | SD entry/option/header 编解码、零拷贝解析、数据报构建器 | option 长度与 entry 计数边界 |
 | M2（核心完成） | 服务端 offer/stop-offer、find 应答、订阅槽表、事件发布、TTL 与重播 | 订阅 TTL 与重播时序 |
-| M3 | 客户端发现、RPC 匹配、超时重传 | 与 vsomeip 的行为差异 |
+| M3（核心完成） | 客户端发现、RPC 匹配、超时、事件回调 | 与 vsomeip 的行为差异 |
 | M4 | newosp 接入、ARM 实测、shell 命令 | 目标板与工具链可用性 |
 
 主要风险有三个：一是 SD 时序（offer 重播、TTL 过期）只能靠互操作暴露；
