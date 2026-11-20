@@ -32,6 +32,12 @@ def parse_args():
     parser.add_argument("--ttl", type=int, default=10)
     parser.add_argument("--seconds", type=float, default=3.0)
     parser.add_argument("--skip-request", action="store_true")
+    parser.add_argument(
+        "--tp-chunk",
+        type=int,
+        default=0,
+        help="split the request into TP segments of this many bytes (multiple of 16)",
+    )
     return parser.parse_args()
 
 
@@ -90,6 +96,22 @@ def subscribe_datagram(args, request_id):
         args.eventgroup,
     )
     return sd_message([entry], ipv4_option(args.local, args.port), request_id)
+
+
+def tp_segments(args, payload, request_id):
+    """Split payload into SOME/IP-TP segments; chunk must be a multiple of 16."""
+    chunk = max(16, (args.tp_chunk // 16) * 16)
+    segments = []
+    for offset in range(0, len(payload), chunk):
+        piece = payload[offset : offset + chunk]
+        more = offset + len(piece) < len(payload)
+        word = ((offset // 16) << 4) | (1 if more else 0)
+        body = struct.pack(">I", word) + piece
+        header = someip_header(
+            (args.service << 16) | args.method, 8 + len(body), request_id, 0x20
+        )
+        segments.append(header + body)
+    return segments
 
 
 def parse_sd(datagram):
@@ -168,15 +190,25 @@ def run_client(args):
                     granted = int.from_bytes(entry[9:12], "big")
                     print(f"subscribe ack granted ttl={granted}")
                     if granted and not args.skip_request and not request_sent:
-                        body = struct.pack(">I", 0x11223344)
-                        header = someip_header(
-                            (args.service << 16) | args.method,
-                            8 + len(body),
-                            request_id,
-                        )
-                        sock.sendto(header + body, (service_endpoint[0], service_endpoint[1]))
+                        if args.tp_chunk:
+                            body = bytes(range(128))
+                            for segment in tp_segments(args, body, request_id):
+                                sock.sendto(
+                                    segment, (service_endpoint[0], service_endpoint[1])
+                                )
+                            print(f"request sent as tp segments of {args.tp_chunk}")
+                        else:
+                            body = struct.pack(">I", 0x11223344)
+                            header = someip_header(
+                                (args.service << 16) | args.method,
+                                8 + len(body),
+                                request_id,
+                            )
+                            sock.sendto(
+                                header + body, (service_endpoint[0], service_endpoint[1])
+                            )
+                            print("request sent")
                         request_sent = True
-                        print("request sent")
         elif message_type == 0x80:
             payload = datagram[16:]
             print(

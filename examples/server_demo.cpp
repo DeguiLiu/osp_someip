@@ -12,6 +12,7 @@
 
 #include "osp/log.hpp"
 #include "osp/someip/server.hpp"
+#include "osp/someip/tp.hpp"
 #include "osp/someip/udp_link.hpp"
 
 #include <array>
@@ -133,7 +134,11 @@ int main(int argc, char** argv) {
   }
 
   DemoSink sink{&sd_socket, &service_socket};
-  osp::someip::Server<DemoSink, 4U, 16U, 1400U, EchoHandler> server(sink);
+  // TP is enabled so a client may split a request over several segments.
+  osp::someip::Server<DemoSink, 4U, 16U, 1400U, EchoHandler, osp::someip::NoE2E,
+                      osp::someip::NoServiceObserver, 4U,
+                      osp::someip::TpReassembly<2048U, 2U, 2000U>>
+      server(sink);
   const osp::someip::ServiceInstance service =
       osp::someip::ServiceInstance::New(options.service_id, 0x0001U, 1U);
   const osp::someip::Ipv4Endpoint endpoint{options.interface_address, kServicePort};

@@ -104,6 +104,7 @@ cmake --build build-demo -j8
 
 ```bash
 python3 tools/sd_probe.py --server 127.0.0.1 --service 1234 --method 0001
+python3 tools/sd_probe.py --server 127.0.0.1 --service 1234 --method 0001 --tp-chunk 32
 python3 tools/sd_probe.py --mode server --service 1234 --seconds 6
 ```
 

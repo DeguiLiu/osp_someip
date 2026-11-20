@@ -72,6 +72,17 @@ python3 tools/sd_probe.py --mode server --service 1234 --seconds 6 &
     --port 30510 --service 1234 --method 0001 --seconds 3
 ```
 
+SOME/IP-TP 互通（Python 探针 → C++ 服务端）：
+
+```bash
+./build-demo/examples/someip_server_demo --iface 127.0.0.1 --seconds 8 &
+python3 tools/sd_probe.py --server 127.0.0.1 --service 1234 --method 0001 --tp-chunk 32
+```
+
+探针把 128 字节请求切成 4 个 32 字节分段发出，服务端重组后原样回显；
+输出 `request sent as tp segments of 32`，响应载荷是 `00 01 02 … 7f` 的完整 128 字节。
+这条链路说明重组实现能被一份独立的 Python 分段器驱动。
+
 订阅续订实测：Python 服务端运行 15 s、C++ 客户端运行 12 s，服务端记录 3 次
 `subscribe from`（初始 + TTL/2 两次续订），客户端收到 12 条事件；offer TTL 到期后客户端
 按预期打印 `service ... gone`。
