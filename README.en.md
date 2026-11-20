@@ -167,7 +167,8 @@ docs/               design, validation, benchmark and static-analysis notes
 
 ## Status and limits
 
-- ARM: cross-built with an aarch64 toolchain and exercised under qemu; no target-board data yet.
+- ARM: cross-built with an aarch64 toolchain and exercised under both qemu-user and a full Linux
+  kernel booted with qemu-system; no target-board data yet.
 - Multicast: join and receive verified on a real NIC (`ens192`), not against an external node across
   a switch.
 - vsomeip 3.4.10 interop passes in both directions. The two stacks run in separate network

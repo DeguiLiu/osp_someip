@@ -198,6 +198,37 @@ cmake --build build/aarch64 -j8 && ctest --test-dir build/aarch64
 
 两条路径都在本机各跑过一遍：133 项，1 项跳过（组播），其余全过。
 
+### 4.1 完整内核（qemu-system）
+
+qemu-user 只翻译指令与系统调用，调度、内核网络栈与用户态 init 都没参与。再上一层用
+`qemu-system-aarch64` 启动完整 Linux：
+
+- 内核：Alpine 3.20 `vmlinuz-virt`。它是 zimg 封装，先用脚本从文件中找到 gzip 载荷解出
+  raw Image（偏移 0x38 处应为 `ARM\x64`），QEMU 才能用 `-kernel` 加载。
+- 用户态：busybox-static（apk 包里的 `bin/busybox.static`）加交叉工具链里的
+  `ld-linux-aarch64.so.1`、`libc`、`libm`、`libgcc_s`、`libstdc++`。
+- init：挂 proc/sys/dev，`ip link set lo up`，跑测试与基准，然后 `poweroff -f`。
+
+```bash
+AARCH64_TOOLCHAIN_ROOT=$HOME/opt/cross-aarch64/root \
+tools/arm_vm.sh Image busybox.static \
+    build/aarch64-tests/tests/someip_tests build/aarch64/examples/someip_loopback_bench
+```
+
+实测（TCG，2 vCPU，1 GB）：
+
+```
+KERNEL: Linux 6.6.134-0-virt aarch64
+test cases: 142 | 141 passed | 1 skipped        (组播用例需要真机网卡)
+assertions: 36942 | 36942 passed
+TESTS_RC=0
+round_trips=3000 avg=94.9us p50=89us p99=228us rate=10103 req/s
+BENCH_RC=0
+```
+
+比 qemu-user 慢一个数量级，符合 TCG 全系统模拟的预期。它的价值在于证明代码在完整内核、
+真实 glibc 用户态与 initramfs 启动链下可运行。
+
 结果：141 个用例通过，1 个跳过（组播），`someip_loopback_bench` 为
 p50 11 µs、p99 24 µs、约 6.6 万次请求/秒。这是 qemu 用户态模拟，不是板上数据。
 
