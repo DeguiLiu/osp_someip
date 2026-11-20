@@ -131,6 +131,14 @@ payload / 源端点` 组一个 `IncomingRequest` 交给 `OnRequest`；处理器�
 服务端据此自动编码 Response 或 Error 并回给源端点。fire-and-forget 只分发不回复。
 处理器在编译期绑定、按值持有（`Handler()` 可取回状态），无堆、无虚函数。
 
+### 3.10 E2E 钩子
+
+`Server` 与 `Client` 都接受一个 `E2E` 策略模板参数，默认 `NoE2E`（检查不适用、保护原样返回）。
+发送路径（服务端 Publish、客户端 Request）先把载荷写入缓冲区头部之后，取临时头的
+`upper_header` 调 `Protect`，按要求调整后的长度重建头并发送；接收路径先 `Check`，
+判定失败直接丢弃，通过后把去掉保护尾的载荷视图交给处理器。策略在编译期绑定，
+未启用时没有分支残留。
+
 ## 4. 验证策略
 
 | 层级 | 内容 | 判定 |
@@ -140,7 +148,7 @@ payload / 源端点` 组一个 `IncomingRequest` 交给 `OnRequest`；处理器�
 | L2 互操作 | 与 vsomeip 容器对端做 RPC、通知、订阅 | 双向收发一致 |
 | L3 目标 | ARM Linux / RT-Thread 构建与静态内存报告 | 无堆、尺寸达标 |
 
-当前 L0 结果：88 个用例、1321 条断言，外加零分配见证进程；普通构建与
+当前 L0 结果：91 个用例、1339 条断言，外加零分配见证进程；普通构建与
 `-fno-exceptions -fno-rtti` 构建均通过。
 
 ## 5. 里程碑与风险

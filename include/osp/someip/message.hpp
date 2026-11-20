@@ -82,6 +82,13 @@ class MessageView final {
   constexpr osp::span<const std::uint8_t> Body() const noexcept { return payload_; }
   constexpr bool IsSd() const noexcept { return header_.IsSd(); }
 
+  /// @brief Copy of this view with a substituted payload; the header is unchanged.
+  constexpr MessageView WithBody(osp::span<const std::uint8_t> body) const noexcept {
+    MessageView copy(*this);
+    copy.payload_ = body;
+    return copy;
+  }
+
   /// @brief Parse the payload as an SD header; requires an SD message.
   osp::expected<sd::SdHeaderView, Error> SdHeader() const noexcept {
     if (!IsSd()) {

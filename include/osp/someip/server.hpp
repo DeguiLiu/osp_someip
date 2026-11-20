@@ -13,6 +13,7 @@
 #define OSP_SOMEIP_SERVER_HPP_
 
 #include "osp/someip/endpoint.hpp"
+#include "osp/someip/e2e.hpp"
 #include "osp/someip/error.hpp"
 #include "osp/someip/header.hpp"
 #include "osp/someip/message.hpp"
@@ -66,9 +67,11 @@ struct NoRequestHandler final {
  * @tparam MaxDatagram   Size of the scratch buffer used to build one datagram.
  * @tparam RequestHandler Supplies `RequestReply OnRequest(const IncomingRequest&)`;
  *                       it is held by value and reachable through Handler().
+ * @tparam E2E            End-to-end protection policy; NoE2E checks nothing.
  */
 template <typename Sink, std::uint32_t MaxOffers = 8U, std::uint32_t MaxSubscribers = 16U,
-          std::uint32_t MaxDatagram = 1400U, typename RequestHandler = NoRequestHandler>
+          std::uint32_t MaxDatagram = 1400U, typename RequestHandler = NoRequestHandler,
+          typename E2E = NoE2E>
 class Server final {
  public:
   /// @brief @p sink must outlive the server and must not store the byte view.
@@ -80,6 +83,9 @@ class Server final {
 
   /// @brief Mutable access to the request handler (tests inspect its counters).
   RequestHandler& Handler() noexcept { return handler_; }
+
+  /// @brief Mutable access to the E2E policy (tests inspect its counters).
+  E2E& E2EHandler() noexcept { return e2e_; }
 
   /// @brief Start offering a service and announce it once.
   bool Offer(const ServiceInstance& service, const Ipv4Endpoint& endpoint,
@@ -155,20 +161,44 @@ class Server final {
   void Publish(const ServiceInstance& service, std::uint16_t event_group_id,
                std::uint16_t event_id, osp::span<const std::uint8_t> payload,
                std::uint32_t now_ms) noexcept {
+    const MessageId message_id =
+        MessageId::FromServiceAndMethod(service.ServiceId(), event_id);
+    const std::uint32_t request_id = static_cast<std::uint32_t>(session_.Next().id);
+    const std::size_t capacity =
+        sizeof(buffer_) - static_cast<std::size_t>(kHeaderSize);
+    if (payload.size() > capacity) {
+      return;
+    }
+    for (std::size_t index = 0U; index < payload.size(); ++index) {
+      buffer_[static_cast<std::size_t>(kHeaderSize) + index] = payload[index];
+    }
+    const Header provisional = Header::New(
+        message_id, request_id, 0x01U, service.MajorVersion(),
+        MessageTypeField::New(MessageType::kNotification, false), ReturnCode::Ok(),
+        static_cast<std::uint32_t>(payload.size()));
+    const auto protected_body = e2e_.Protect(
+        message_id, provisional.UpperHeaderBytes(),
+        osp::make_span(buffer_ + static_cast<std::size_t>(kHeaderSize), capacity),
+        static_cast<std::uint32_t>(payload.size()));
+    if (protected_body.data() != buffer_ + static_cast<std::size_t>(kHeaderSize)) {
+      return;
+    }
+    const Header header = Header::New(
+        message_id, request_id, 0x01U, service.MajorVersion(),
+        MessageTypeField::New(MessageType::kNotification, false), ReturnCode::Ok(),
+        static_cast<std::uint32_t>(protected_body.size()));
+    const auto written = header.EncodeTo(osp::span<std::uint8_t>(buffer_, kHeaderSize));
+    if (!written.has_value()) {
+      return;
+    }
+    const auto datagram = osp::span<const std::uint8_t>(
+        buffer_, static_cast<std::size_t>(kHeaderSize) + protected_body.size());
     for (auto& slot : subscribers_) {
       if (!slot.active || !(slot.service == service) ||
           slot.event_group_id != event_group_id || now_ms >= slot.expires_ms) {
         continue;
       }
-      const Header header =
-          Header::NewEvent(service.ServiceId(), event_id,
-                           static_cast<std::uint32_t>(session_.Next().id), 0x01U,
-                           service.MajorVersion(),
-                           static_cast<std::uint32_t>(payload.size()));
-      const Message<OpaquePayload> message(header, OpaquePayload(payload));
-      Emit([&message](osp::span<std::uint8_t> out, sd::SdSession /*session*/) {
-        return message.EncodeTo(out);
-      }, slot.endpoint);
+      sink_(datagram, slot.endpoint);
     }
   }
 
@@ -249,12 +279,16 @@ class Server final {
 
   void HandleRequest(MessageView message, const Ipv4Endpoint& source) noexcept {
     const HeaderView head = message.Head();
+    const E2ECheck check = e2e_.Check(head.Id(), head.UpperHeaderBytes(), message.Body());
+    if (check.applies && !check.ok) {
+      return;
+    }
     IncomingRequest request;
     request.request_id = head.RequestId();
     request.service_id = head.Id().ServiceId();
     request.method_id = head.Id().MethodId();
     request.interface_version = head.InterfaceVersion();
-    request.payload = message.Body();
+    request.payload = check.payload;
     request.from = source;
     const RequestReply reply = handler_.OnRequest(request);
     if (!reply.handled || MessageType::kRequestNoReturn == head.Type().Type()) {
@@ -433,6 +467,7 @@ class Server final {
   Sink& sink_;
   Ipv4Endpoint sd_multicast_{};
   RequestHandler handler_{};
+  E2E e2e_{};
   OfferSlot offers_[MaxOffers]{};
   SubscriberSlot subscribers_[MaxSubscribers]{};
   sd::SdSessionCounter session_ = sd::SdSessionCounter::New();

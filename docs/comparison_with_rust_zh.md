@@ -27,7 +27,7 @@ SD 编解码、服务端与客户端核心；尚未覆盖 SOME/IP-TP 重组、E2
 | 服务端 offer / 订阅 / 事件发布 | 有（async） | 有（同步核心） | 本项目含 TTL 到期与 TTL/2 重播 |
 | 服务端请求分发 | 非 SD 原始数据报回调 | `RequestHandler` 类型化分发并自动回 Response/Error | 本项目支持 fire-and-forget |
 | 客户端发现 / 订阅 / RPC | 有（async，oneshot 响应） | 有（回调 + 超时） | 请求 ID 规则一致：client<<16 \| session |
-| E2E 保护 | 仅 trait 钩子 | 无 | 本项目列为范围外 |
+| E2E 保护 | 仅 trait 钩子 | `E2E` 策略钩子（Check / Protect，默认 `NoE2E`） | 双方都未内置具体 profile |
 | 组播加入 | 有（socket2） | 有（`JoinSdMulticast` + `IP_ADD_MEMBERSHIP`） | 组播实测仍需真实网卡环境 |
 | 互操作实测（vsomeip） | 有（Docker） | 未跑 | 本机 Docker 守护进程不可用 |
 | 金丝雀/无分配见证 | 有 | 有 | 本项目用全局 `operator new` 计数 |
@@ -59,5 +59,4 @@ SD 编解码、服务端与客户端核心；尚未覆盖 SOME/IP-TP 重组、E2
 1. **互操作实测**：换到 Docker 可用的机器，用 `tests/data/vsomeip-peer` 的镜像跑
    find/offer/subscribe/publish/RPC。
 2. **组播实测**：加入逻辑与示例已就绪，需在真实网卡/IGMP 环境下与 vsomeip 对跑。
-3. **E2E 钩子**：在 `Server`/`Client` 的收发路径预留 `E2EHandle` 策略，默认空实现。
-4. **目标板实测**：ARM Linux / RT-Thread 上的内存与吞吐数据，目前只有 x86 结果。
+3. **目标板实测**：ARM Linux / RT-Thread 上的内存与吞吐数据，目前只有 x86 结果。

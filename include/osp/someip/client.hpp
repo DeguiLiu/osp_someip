@@ -12,6 +12,7 @@
 #define OSP_SOMEIP_CLIENT_HPP_
 
 #include "osp/someip/endpoint.hpp"
+#include "osp/someip/e2e.hpp"
 #include "osp/someip/header.hpp"
 #include "osp/someip/message.hpp"
 #include "osp/someip/payload.hpp"
@@ -40,7 +41,8 @@ namespace osp::someip {
  * @endcode
  */
 template <typename Sink, typename Handler, std::uint32_t MaxServices = 16U,
-          std::uint32_t MaxPending = 4U, std::uint32_t MaxDatagram = 1400U>
+          std::uint32_t MaxPending = 4U, std::uint32_t MaxDatagram = 1400U,
+          typename E2E = NoE2E>
 class Client final {
  public:
   static constexpr std::uint32_t kFindRepetitions = 3U;
@@ -65,6 +67,9 @@ class Client final {
 
   Client(const Client&) = delete;
   Client& operator=(const Client&) = delete;
+
+  /// @brief Mutable access to the E2E policy (tests inspect its counters).
+  E2E& E2EHandler() noexcept { return e2e_; }
 
   /// @brief Send a FindService now and repeat it at doubling intervals.
   bool StartFind(std::uint16_t service_id, std::uint32_t now_ms) noexcept {
@@ -118,11 +123,17 @@ class Client final {
       HandleSd(message.value(), source, now_ms);
       return;
     }
-    const MessageType type = message.value().Head().Type().Type();
+    const HeaderView head = message.value().Head();
+    const E2ECheck check = e2e_.Check(head.Id(), head.UpperHeaderBytes(), message.value().Body());
+    if (check.applies && !check.ok) {
+      return;
+    }
+    const MessageView body_view = message.value().WithBody(check.payload);
+    const MessageType type = head.Type().Type();
     if (MessageType::kNotification == type) {
-      handler_.OnEvent(message.value());
+      handler_.OnEvent(body_view);
     } else if (MessageType::kResponse == type || MessageType::kError == type) {
-      HandleResponse(message.value());
+      HandleResponse(body_view);
     }
   }
 
@@ -136,17 +147,38 @@ class Client final {
       return false;
     }
     const std::uint32_t request_id = NextRequestId();
-    const Header header =
-        Header::New(MessageId::FromServiceAndMethod(service.ServiceId(), method_id),
-                    request_id, 0x01U, service.MajorVersion(),
-                    MessageTypeField::New(MessageType::kRequest, false), ReturnCode::Ok(),
-                    static_cast<std::uint32_t>(payload.size()));
-    const Message<OpaquePayload> message(header, OpaquePayload(payload));
-    const auto written = message.EncodeTo(osp::make_span(buffer_));
+    const MessageId message_id =
+        MessageId::FromServiceAndMethod(service.ServiceId(), method_id);
+    const std::size_t capacity =
+        sizeof(buffer_) - static_cast<std::size_t>(kHeaderSize);
+    if (payload.size() > capacity) {
+      return false;
+    }
+    for (std::size_t index = 0U; index < payload.size(); ++index) {
+      buffer_[static_cast<std::size_t>(kHeaderSize) + index] = payload[index];
+    }
+    const Header provisional = Header::New(
+        message_id, request_id, 0x01U, service.MajorVersion(),
+        MessageTypeField::New(MessageType::kRequest, false), ReturnCode::Ok(),
+        static_cast<std::uint32_t>(payload.size()));
+    const auto protected_body = e2e_.Protect(
+        message_id, provisional.UpperHeaderBytes(),
+        osp::make_span(buffer_ + static_cast<std::size_t>(kHeaderSize), capacity),
+        static_cast<std::uint32_t>(payload.size()));
+    if (protected_body.data() != buffer_ + static_cast<std::size_t>(kHeaderSize)) {
+      return false;
+    }
+    const Header header = Header::New(
+        message_id, request_id, 0x01U, service.MajorVersion(),
+        MessageTypeField::New(MessageType::kRequest, false), ReturnCode::Ok(),
+        static_cast<std::uint32_t>(protected_body.size()));
+    const auto written = header.EncodeTo(osp::span<std::uint8_t>(buffer_, kHeaderSize));
     if (!written.has_value()) {
       return false;
     }
-    sink_(osp::span<const std::uint8_t>(buffer_, written.value()), remote->endpoint);
+    sink_(osp::span<const std::uint8_t>(
+              buffer_, static_cast<std::size_t>(kHeaderSize) + protected_body.size()),
+          remote->endpoint);
     slot->request_id = request_id;
     slot->deadline_ms = now_ms + timeout_ms;
     slot->active = true;
@@ -345,6 +377,7 @@ class Client final {
   FindSlot finds_[MaxServices]{};
   RemoteService services_[MaxServices]{};
   PendingSlot pending_[MaxPending]{};
+  E2E e2e_{};
   sd::SdSessionCounter session_ = sd::SdSessionCounter::New();
   std::uint16_t session_id_{0U};
   std::uint8_t buffer_[MaxDatagram]{};
