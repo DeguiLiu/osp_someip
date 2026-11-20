@@ -102,6 +102,8 @@ struct EventHandler final {
   void OnTimeout(std::uint32_t /*id*/) noexcept {}
   void OnSubscribeAck(std::uint16_t /*s*/, std::uint16_t /*i*/, std::uint16_t /*eg*/,
                       std::uint32_t /*ttl*/) noexcept {}
+  void OnServiceAvailable(ServiceInstance /*service*/) noexcept {}
+  void OnServiceGone(ServiceInstance /*service*/) noexcept {}
 };
 
 struct CountingRequestHandler final {

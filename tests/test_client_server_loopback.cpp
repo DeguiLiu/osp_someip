@@ -79,6 +79,8 @@ struct Handler final {
     ++acks;
     granted_ttl = granted;
   }
+  void OnServiceAvailable(osp::someip::ServiceInstance /*service*/) noexcept {}
+  void OnServiceGone(osp::someip::ServiceInstance /*service*/) noexcept {}
 };
 
 }  // namespace

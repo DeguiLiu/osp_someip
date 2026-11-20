@@ -42,6 +42,8 @@ struct NullHandler final {
   void OnTimeout(std::uint32_t /*request_id*/) noexcept {}
   void OnSubscribeAck(std::uint16_t /*service_id*/, std::uint16_t /*instance_id*/,
                       std::uint16_t /*event_group_id*/, std::uint32_t /*granted*/) noexcept {}
+  void OnServiceAvailable(osp::someip::ServiceInstance /*service*/) noexcept {}
+  void OnServiceGone(osp::someip::ServiceInstance /*service*/) noexcept {}
 };
 
 struct EchoRequestHandler final {

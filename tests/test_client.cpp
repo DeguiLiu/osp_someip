@@ -68,6 +68,8 @@ struct Handler final {
   std::uint32_t acks{0U};
   std::uint32_t granted_ttl{0U};
   std::uint16_t ack_event_group{0U};
+  std::uint32_t available{0U};
+  std::uint32_t gone{0U};
 
   void OnResponse(std::uint32_t request_id, MessageView message) noexcept {
     ++responses;
@@ -91,6 +93,9 @@ struct Handler final {
     ack_event_group = event_group_id;
     granted_ttl = granted;
   }
+
+  void OnServiceAvailable(osp::someip::ServiceInstance /*service*/) noexcept { ++available; }
+  void OnServiceGone(osp::someip::ServiceInstance /*service*/) noexcept { ++gone; }
 };
 
 SdSession Session(std::uint16_t id) noexcept {
@@ -149,6 +154,7 @@ TEST_CASE("client - offers populate and stop-offers clear the cache", "[client]"
   REQUIRE(0U != offer_size);
   client.HandleDatagram(osp::make_span(offer, offer_size), source, 0U);
   REQUIRE(1U == client.ServiceCount());
+  REQUIRE(1U == handler.available);
 
   const auto* cached = client.FindCached(service);
   REQUIRE(nullptr != cached);
@@ -161,6 +167,7 @@ TEST_CASE("client - offers populate and stop-offers clear the cache", "[client]"
   client.HandleDatagram(osp::make_span(offer, stop_size), source, 10U);
   REQUIRE(0U == client.ServiceCount());
   REQUIRE(nullptr == client.FindCached(service));
+  REQUIRE(1U == handler.gone);
 }
 
 TEST_CASE("client - request response matching and timeout", "[client]") {
@@ -261,4 +268,20 @@ TEST_CASE("client - subscribe sends the local endpoint and reports the ack", "[c
   REQUIRE(1U == handler.acks);
   REQUIRE(0x0001U == handler.ack_event_group);
   REQUIRE(5U == handler.granted_ttl);
+}
+
+TEST_CASE("client - service expiry reports gone", "[client]") {
+  Sink sink;
+  Handler handler;
+  Client<Sink, Handler, 4U, 2U> client(sink, handler, {{127U, 0U, 0U, 1U}, 30510U});
+  const Ipv4Endpoint source{{127U, 0U, 0U, 2U}, 30490U};
+
+  std::uint8_t offer[128] = {};
+  client.HandleDatagram(osp::make_span(offer, BuildOffer(offer, 3U, false)), source, 0U);
+  REQUIRE(1U == client.ServiceCount());
+  REQUIRE(1U == handler.available);
+
+  client.Tick(3001U);
+  REQUIRE(0U == client.ServiceCount());
+  REQUIRE(1U == handler.gone);
 }

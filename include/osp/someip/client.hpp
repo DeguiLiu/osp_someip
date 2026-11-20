@@ -36,6 +36,8 @@ namespace osp::someip {
  *   void OnResponse(std::uint32_t request_id, MessageView message) noexcept;
  *   void OnEvent(MessageView message) noexcept;
  *   void OnTimeout(std::uint32_t request_id) noexcept;
+ *   void OnServiceAvailable(ServiceInstance service) noexcept;
+ *   void OnServiceGone(ServiceInstance service) noexcept;
  *   void OnSubscribeAck(std::uint16_t service_id, std::uint16_t instance_id,
  *                       std::uint16_t event_group_id, std::uint32_t granted_ttl_s) noexcept;
  * @endcode
@@ -91,6 +93,12 @@ class Client final {
 
   /// @brief Repeat due finds and report timed-out requests.
   void Tick(std::uint32_t now_ms) noexcept {
+    for (auto& slot : services_) {
+      if (slot.active && now_ms >= slot.expires_ms) {
+        slot.active = false;
+        handler_.OnServiceGone(slot.service);
+      }
+    }
     for (auto& slot : finds_) {
       if (!slot.active || now_ms < slot.next_ms) {
         continue;
@@ -323,9 +331,14 @@ class Client final {
       return;
     }
     if (sd::Entry::Kind::kStopOfferService == entry.Kind() || 0U == entry.Ttl()) {
+      const bool was_active = slot->active;
       slot->active = false;
+      if (was_active) {
+        handler_.OnServiceGone(service);
+      }
       return;
     }
+    const bool was_active = slot->active;
     sd::OptionView option;
     const bool has_option = sd_header.OptionAt(entry.IndexFirstOptionsRun(), option);
     slot->service = service;
@@ -337,6 +350,9 @@ class Client final {
     slot->minor_version = entry.MinorVersion();
     slot->expires_ms = now_ms + (entry.Ttl() * 1000U);
     slot->active = true;
+    if (!was_active) {
+      handler_.OnServiceAvailable(service);
+    }
   }
 
   RemoteService* ServiceSlot(const ServiceInstance& service) noexcept {

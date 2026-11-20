@@ -122,6 +122,8 @@ placement new（`vocabulary.hpp`）；本仓库不直接使用 `new`、`delete`�
 `client_id(1) << 16 | session` 生成请求 ID 并登记超时；收到的 Response/Error 按请求 ID
 匹配后回调 `OnResponse`，`Tick` 到期回调 `OnTimeout`；Notification 直接回调 `OnEvent`；
 Subscribe 带上本地端点选项，Ack/Nack 通过 `OnSubscribeAck` 上报授予的 TTL。
+服务缓存新增或过期/stop-offer 时分别回调 `OnServiceAvailable` 与 `OnServiceGone`，
+与 Rust 的可用性更新流语义对应。
 
 ### 3.9 服务端请求分发
 
@@ -148,7 +150,7 @@ payload / 源端点` 组一个 `IncomingRequest` 交给 `OnRequest`；处理器�
 | L2 互操作 | 与 vsomeip 容器对端做 RPC、通知、订阅 | 双向收发一致 |
 | L3 目标 | ARM Linux / RT-Thread 构建与静态内存报告 | 无堆、尺寸达标 |
 
-当前 L0 结果：91 个用例、1339 条断言，外加零分配见证进程；普通构建与
+当前 L0 结果：92 个用例、1345 条断言，外加零分配见证进程；普通构建与
 `-fno-exceptions -fno-rtti` 构建均通过。
 
 ## 5. 里程碑与风险

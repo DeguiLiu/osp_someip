@@ -26,7 +26,7 @@ SD 编解码、服务端与客户端核心；尚未覆盖 SOME/IP-TP 重组、E2
 | SD 数据报构建（Find/Offer/Stop/Subscribe/Ack） | 有 | 有 | 本项目另含 Find 构建器 |
 | 服务端 offer / 订阅 / 事件发布 | 有（async） | 有（同步核心） | 本项目含 TTL 到期与 TTL/2 重播 |
 | 服务端请求分发 | 非 SD 原始数据报回调 | `RequestHandler` 类型化分发并自动回 Response/Error | 本项目支持 fire-and-forget |
-| 客户端发现 / 订阅 / RPC | 有（async，oneshot 响应） | 有（回调 + 超时） | 请求 ID 规则一致：client<<16 \| session |
+| 客户端发现 / 订阅 / RPC | 有（async，oneshot 响应） | 有（回调 + 超时 + 可用性回调） | 请求 ID 规则一致：client<<16 \| session |
 | E2E 保护 | 仅 trait 钩子 | `E2E` 策略钩子（Check / Protect，默认 `NoE2E`） | 双方都未内置具体 profile |
 | 组播加入 | 有（socket2） | 有（`JoinSdMulticast` + `IP_ADD_MEMBERSHIP`） | 组播实测仍需真实网卡环境 |
 | 互操作实测（vsomeip） | 有（Docker） | 未跑 | 本机 Docker 守护进程不可用 |
@@ -48,7 +48,7 @@ SD 编解码、服务端与客户端核心；尚未覆盖 SOME/IP-TP 重组、E2
 
 | 项 | Rust | 本项目 |
 |---|---|---|
-| 单元/集成测试 | 824 个 `#[test]` 标注 | 88 个用例、1321 条断言 |
+| 单元/集成测试 | 824 个 `#[test]` 标注 | 92 个用例、1345 条断言 |
 | 线格式 golden | 19 条手写字面量 | 19 条同源字面量（逐字节移植） |
 | 无分配 | `no_alloc_witness` 测试 | `someip_no_alloc` 进程，覆盖 server + client |
 | 真实网络 | tokio + vsomeip 容器互操作 | 真实 UDP 环回：服务端用例 + 客户端/服务端联调用例 |
