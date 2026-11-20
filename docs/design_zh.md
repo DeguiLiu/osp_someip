@@ -133,6 +133,12 @@ Subscribe 带上本地端点选项，Ack/Nack 通过 `OnSubscribeAck` 上报授�
 对端重启检测按 SD 源地址记录会话号：若新报文带 RecentlyRebooted 且会话号不增，
 判定对端重启，清除该源的服务缓存与订阅并回调 `OnSenderRebooted`。
 
+### 3.11 服务端远端观察者
+
+`Server` 额外接收其他节点的 Offer/StopOffer：远端服务表定容保存服务标识、端点与到期时刻，
+首次出现回调 `OnServiceAvailable`，stop-offer 或 TTL 到期回调 `OnServiceGone`。
+与本节点自身 offer 相同的公告会被忽略，避免组播回环把本机误判成远端。
+
 ### 3.9 服务端请求分发
 
 `Server` 的第五个模板参数是 `RequestHandler`，默认 `NoRequestHandler` 忽略所有请求。
@@ -158,7 +164,7 @@ payload / 源端点` 组一个 `IncomingRequest` 交给 `OnRequest`；处理器�
 | L2 互操作 | 与 vsomeip 容器对端做 RPC、通知、订阅 | 双向收发一致 |
 | L3 目标 | ARM Linux / RT-Thread 构建与静态内存报告 | 无堆、尺寸达标 |
 
-当前 L0 结果：99 个用例、3691 条断言（含 3000 轮确定性变异扫描），外加零分配见证进程；
+当前 L0 结果：101 个用例、3699 条断言（含 3000 轮确定性变异扫描），外加零分配见证进程；
 普通构建、`-fno-exceptions -fno-rtti` 构建与 ASan+UBSan 构建均通过。
 
 ## 5. 里程碑与风险

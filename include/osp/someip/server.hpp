@@ -56,6 +56,12 @@ struct NoRequestHandler final {
   RequestReply OnRequest(const IncomingRequest& /*request*/) noexcept { return RequestReply{}; }
 };
 
+/// @brief Default observer for services offered by other nodes: reports nothing.
+struct NoServiceObserver final {
+  void OnServiceAvailable(ServiceInstance /*service*/) noexcept {}
+  void OnServiceGone(ServiceInstance /*service*/) noexcept {}
+};
+
 /**
  * @brief SOME/IP service provider over caller-supplied transport and clock.
  *
@@ -68,10 +74,12 @@ struct NoRequestHandler final {
  * @tparam RequestHandler Supplies `RequestReply OnRequest(const IncomingRequest&)`;
  *                       it is held by value and reachable through Handler().
  * @tparam E2E            End-to-end protection policy; NoE2E checks nothing.
+ * @tparam Observer       Receives availability changes of remote offers.
  */
 template <typename Sink, std::uint32_t MaxOffers = 8U, std::uint32_t MaxSubscribers = 16U,
           std::uint32_t MaxDatagram = 1400U, typename RequestHandler = NoRequestHandler,
-          typename E2E = NoE2E>
+          typename E2E = NoE2E, typename Observer = NoServiceObserver,
+          std::uint32_t MaxRemoteServices = 8U>
 class Server final {
  public:
   /// @brief @p sink must outlive the server and must not store the byte view.
@@ -86,6 +94,9 @@ class Server final {
 
   /// @brief Mutable access to the E2E policy (tests inspect its counters).
   E2E& E2EHandler() noexcept { return e2e_; }
+
+  /// @brief Mutable access to the remote-service observer.
+  Observer& ObserverHandler() noexcept { return observer_; }
 
   /// @brief Start offering a service and announce it once.
   bool Offer(const ServiceInstance& service, const Ipv4Endpoint& endpoint,
@@ -119,6 +130,12 @@ class Server final {
 
   /// @brief Expire subscriptions and re-announce offers at half their TTL.
   void Tick(std::uint32_t now_ms) noexcept {
+    for (auto& slot : remotes_) {
+      if (slot.active && now_ms >= slot.expires_ms) {
+        slot.active = false;
+        observer_.OnServiceGone(slot.service);
+      }
+    }
     for (auto& slot : subscribers_) {
       if (slot.active && now_ms >= slot.expires_ms) {
         slot.active = false;
@@ -233,6 +250,13 @@ class Server final {
     bool active{false};
   };
 
+  struct RemoteSlot final {
+    ServiceInstance service{};
+    Ipv4Endpoint endpoint{};
+    std::uint32_t expires_ms{0U};
+    bool active{false};
+  };
+
   template <std::uint32_t N>
   static std::uint32_t CountActive(const OfferSlot (&slots)[N]) noexcept {
     std::uint32_t count = 0U;
@@ -275,6 +299,65 @@ class Server final {
       }
     }
     return nullptr;
+  }
+
+  bool IsOwnOffer(const ServiceInstance& service) const noexcept {
+    for (const auto& slot : offers_) {
+      if (slot.active && slot.service == service) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  RemoteSlot* RemoteSlotFor(const ServiceInstance& service) noexcept {
+    RemoteSlot* free_slot = nullptr;
+    for (auto& slot : remotes_) {
+      if (slot.active && slot.service == service) {
+        return &slot;
+      }
+      if (!slot.active && nullptr == free_slot) {
+        free_slot = &slot;
+      }
+    }
+    return free_slot;
+  }
+
+  void HandleRemoteOffer(const sd::EntryView& entry, const sd::SdHeaderView& sd_header,
+                         const Ipv4Endpoint& source, std::uint32_t now_ms) noexcept {
+    const ServiceInstance service =
+        ServiceInstance::New(entry.ServiceId(), entry.InstanceId(), entry.MajorVersion());
+    if (IsOwnOffer(service)) {
+      return;  // our own announcement looped back through multicast
+    }
+    RemoteSlot* slot = RemoteSlotFor(service);
+    if (nullptr == slot) {
+      return;
+    }
+    const bool was_active = slot->active;
+    sd::OptionView option;
+    const bool has_option = sd_header.OptionAt(entry.IndexFirstOptionsRun(), option);
+    slot->service = service;
+    slot->endpoint = (has_option && option.IsKnown() &&
+                      sd::OptionType::kIpV4Endpoint == option.Type())
+                         ? Ipv4Endpoint{option.AddressV4(), option.Port()}
+                         : source;
+    slot->expires_ms = now_ms + (entry.Ttl() * 1000U);
+    slot->active = true;
+    if (!was_active) {
+      observer_.OnServiceAvailable(service);
+    }
+  }
+
+  void HandleRemoteStop(const sd::EntryView& entry) noexcept {
+    const ServiceInstance service =
+        ServiceInstance::New(entry.ServiceId(), entry.InstanceId(), entry.MajorVersion());
+    for (auto& slot : remotes_) {
+      if (slot.active && slot.service == service) {
+        slot.active = false;
+        observer_.OnServiceGone(service);
+      }
+    }
   }
 
   void HandleRequest(MessageView message, const Ipv4Endpoint& source) noexcept {
@@ -322,6 +405,12 @@ class Server final {
           break;
         case sd::Entry::Kind::kSubscribe:
           HandleSubscribe(entry, sd_header, source, now_ms);
+          break;
+        case sd::Entry::Kind::kOfferService:
+          HandleRemoteOffer(entry, sd_header, source, now_ms);
+          break;
+        case sd::Entry::Kind::kStopOfferService:
+          HandleRemoteStop(entry);
           break;
         default:
           break;
@@ -468,8 +557,10 @@ class Server final {
   Ipv4Endpoint sd_multicast_{};
   RequestHandler handler_{};
   E2E e2e_{};
+  Observer observer_{};
   OfferSlot offers_[MaxOffers]{};
   SubscriberSlot subscribers_[MaxSubscribers]{};
+  RemoteSlot remotes_[MaxRemoteServices]{};
   sd::SdSessionCounter session_ = sd::SdSessionCounter::New();
   std::uint8_t buffer_[MaxDatagram]{};
 };

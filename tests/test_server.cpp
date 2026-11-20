@@ -15,6 +15,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 using osp::someip::BuildFindServiceDatagram;
+using osp::someip::BuildOfferServiceDatagram;
+using osp::someip::BuildStopOfferServiceDatagram;
 using osp::someip::BuildSubscribeEventGroupDatagram;
 using osp::someip::Header;
 using osp::someip::IncomingRequest;
@@ -25,6 +27,7 @@ using osp::someip::MessageView;
 using osp::someip::MessageType;
 using osp::someip::MessageTypeField;
 using osp::someip::OpaquePayload;
+using osp::someip::OfferServiceRequest;
 using osp::someip::RequestReply;
 using osp::someip::ReturnCode;
 using osp::someip::Server;
@@ -334,4 +337,73 @@ TEST_CASE("server - requests are dispatched and answered", "[server][rpc]") {
   server.HandleDatagram(osp::make_span(request_bytes, fire_size), client, 0U);
   REQUIRE(before == capture.count);
   REQUIRE(3U == server.Handler().calls);
+}
+
+namespace {
+
+struct CountingObserver final {
+  std::uint32_t available{0U};
+  std::uint32_t gone{0U};
+
+  void OnServiceAvailable(ServiceInstance /*service*/) noexcept { ++available; }
+  void OnServiceGone(ServiceInstance /*service*/) noexcept { ++gone; }
+};
+
+std::uint32_t EncodeOffer(std::uint8_t* out, const OfferServiceRequest& request,
+                          bool stop) noexcept {
+  auto session = SdSessionCounter::New();
+  const auto built =
+      stop ? BuildStopOfferServiceDatagram(osp::make_span(out, 128U), request, session.Next())
+           : BuildOfferServiceDatagram(osp::make_span(out, 128U), request, session.Next());
+  return built.has_value() ? built.value() : 0U;
+}
+
+OfferServiceRequest RemoteOffer(std::uint16_t service_id, std::uint32_t ttl) noexcept {
+  OfferServiceRequest request;
+  request.service_id = service_id;
+  request.instance_id = 0x0001U;
+  request.major_version = 1U;
+  request.ttl = ttl;
+  request.local_ip = {10U, 0U, 0U, 1U};
+  request.unicast_port = 30600U;
+  return request;
+}
+
+}  // namespace
+
+TEST_CASE("server - remote offers are observed and expire", "[server][observer]") {
+  Capture capture;
+  Server<Capture, 2U, 2U, 1400U, osp::someip::NoRequestHandler, osp::someip::NoE2E,
+         CountingObserver>
+      server(capture);
+  const Ipv4Endpoint remote{{127U, 0U, 0U, 2U}, 30490U};
+  const OfferServiceRequest request = RemoteOffer(0x2222U, 2U);
+
+  std::uint8_t buffer[128] = {};
+  const std::uint32_t size = EncodeOffer(buffer, request, false);
+  REQUIRE(0U != size);
+  server.HandleDatagram(osp::make_span(buffer, size), remote, 0U);
+  REQUIRE(1U == server.ObserverHandler().available);
+
+  server.HandleDatagram(osp::make_span(buffer, size), remote, 100U);
+  REQUIRE(1U == server.ObserverHandler().available);
+  REQUIRE(0U == server.ObserverHandler().gone);
+
+  server.Tick(2101U);  // 2 s after the refresh at 100 ms
+  REQUIRE(1U == server.ObserverHandler().gone);
+}
+
+TEST_CASE("server - own announcement is not reported as remote", "[server][observer]") {
+  Capture capture;
+  Server<Capture, 2U, 2U, 1400U, osp::someip::NoRequestHandler, osp::someip::NoE2E,
+         CountingObserver>
+      server(capture);
+  const ServiceInstance service = ServiceInstance::New(0x1234U, 0x0001U, 1U);
+  REQUIRE(server.Offer(service, {{127U, 0U, 0U, 1U}, 30509U}, 30U, 0U));
+
+  std::uint8_t buffer[128] = {};
+  const std::uint32_t size = EncodeOffer(buffer, RemoteOffer(0x1234U, 30U), false);
+  REQUIRE(0U != size);
+  server.HandleDatagram(osp::make_span(buffer, size), {{127U, 0U, 0U, 2U}, 30490U}, 0U);
+  REQUIRE(0U == server.ObserverHandler().available);
 }
