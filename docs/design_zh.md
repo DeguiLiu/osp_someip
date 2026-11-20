@@ -130,7 +130,7 @@ Subscribe 带上本地端点选项，Ack/Nack 通过 `OnSubscribeAck` 上报授�
 | L2 互操作 | 与 vsomeip 容器对端做 RPC、通知、订阅 | 双向收发一致 |
 | L3 目标 | ARM Linux / RT-Thread 构建与静态内存报告 | 无堆、尺寸达标 |
 
-当前 L0 结果：86 个用例、1287 条断言，外加零分配见证进程；普通构建与
+当前 L0 结果：87 个用例、1306 条断言，外加零分配见证进程；普通构建与
 `-fno-exceptions -fno-rtti` 构建均通过。
 
 ## 5. 里程碑与风险

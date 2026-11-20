@@ -41,6 +41,7 @@ add_executable(someip_tests
     test_server.cpp
     test_client.cpp
     test_udp_loopback.cpp
+    test_client_server_loopback.cpp
 )
 target_link_libraries(someip_tests Catch2::Catch2WithMain osp_someip Threads::Threads)
 

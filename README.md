@@ -17,7 +17,7 @@
 | 服务端 | offer/stop-offer、find 应答、订阅槽表、事件发布、TTL 到期与 offer 重播（M2） |
 | 客户端 | 发现缓存、find 按倍增间隔重发、请求/响应匹配、超时、事件回调（M3） |
 | 零堆 | 全局 `operator new` 计数见证进程，完整场景 0 次分配 |
-| 测试 | 86 个用例、1287 条断言，含真实 UDP 环回用例；普通构建与无异常构建均通过 |
+| 测试 | 87 个用例、1306 条断言，含客户端/服务端真实 UDP 联调；普通构建与无异常构建均通过 |
 
 ## 目录结构
 
@@ -72,7 +72,8 @@ newosp 头文件默认取 `../newosp/include`，可用 `-DOSP_INCLUDE_DIR=<path>
    `operator new` 计数守护这一点。
 
 详见 [docs/design_zh.md](docs/design_zh.md)，参考实现清单见
-[docs/reference_projects_zh.md](docs/reference_projects_zh.md)。
+[docs/reference_projects_zh.md](docs/reference_projects_zh.md)，与 Rust 原型的对照见
+[docs/comparison_with_rust_zh.md](docs/comparison_with_rust_zh.md)。
 
 ## 路线图
 
