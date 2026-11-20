@@ -33,6 +33,12 @@ def parse_args():
     parser.add_argument("--seconds", type=float, default=3.0)
     parser.add_argument("--skip-request", action="store_true")
     parser.add_argument(
+        "--e2e",
+        choices=("none", "p1"),
+        default="none",
+        help="protect requests and replies with E2E Profile 1 (data ID 0x1234)",
+    )
+    parser.add_argument(
         "--tp-chunk",
         type=int,
         default=0,
@@ -96,6 +102,36 @@ def subscribe_datagram(args, request_id):
         args.eventgroup,
     )
     return sd_message([entry], ipv4_option(args.local, args.port), request_id)
+
+
+E2E_DATA_ID = bytes([0x12, 0x34])
+E2E_COUNTER = [0]
+
+
+def crc8_sae_j1850(data):
+    crc = 0xFF
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x1D) & 0xFF if crc & 0x80 else (crc << 1) & 0xFF
+    return crc ^ 0xFF
+
+
+def e2e_protect(payload):
+    """Profile 1: [counter, crc] in front of the payload."""
+    counter = E2E_COUNTER[0] & 0x0F
+    E2E_COUNTER[0] = (E2E_COUNTER[0] + 1) & 0x0F
+    crc = crc8_sae_j1850(E2E_DATA_ID + bytes([counter, 0]) + payload)
+    return bytes([counter, crc]) + payload
+
+
+def e2e_check(body):
+    """Returns (ok, payload, counter) for a Profile 1 protected body."""
+    if len(body) < 2:
+        return False, b"", 0
+    counter = body[0] & 0x0F
+    expected = crc8_sae_j1850(E2E_DATA_ID + bytes([counter, 0]) + body[2:])
+    return expected == body[1], body[2:], counter
 
 
 def tp_segments(args, payload, request_id, message_type=0x20):
@@ -199,6 +235,8 @@ def run_client(args):
                             print(f"request sent as tp segments of {args.tp_chunk}")
                         else:
                             body = struct.pack(">I", 0x11223344)
+                            if args.e2e == "p1":
+                                body = e2e_protect(body)
                             header = someip_header(
                                 (args.service << 16) | args.method,
                                 8 + len(body),
@@ -211,6 +249,9 @@ def run_client(args):
                         request_sent = True
         elif message_type == 0x80:
             payload = datagram[16:]
+            if args.e2e == "p1":
+                ok, payload, counter = e2e_check(payload)
+                print(f"e2e check={'ok' if ok else 'failed'} counter={counter}")
             print(
                 f"response request_id=0x{struct.unpack('>I', datagram[8:12])[0]:08X} "
                 f"payload={payload.hex()}"
@@ -311,6 +352,15 @@ def run_server(args):
                         service_sock.sendto(segment, source)
                     print(f"request 0x{message_id & 0xFFFF:04X} -> tp response of 128 bytes")
                 else:
+                    if args.e2e == "p1":
+                        ok, payload, counter = e2e_check(body)
+                        if not ok:
+                            print("e2e check failed, request dropped")
+                            continue
+                        print(f"e2e check=ok counter={counter}")
+                        body = payload
+                    if args.e2e == "p1":
+                        body = e2e_protect(body)
                     response = (
                         someip_header(message_id, 8 + len(body), request_id, 0x80, 0x00)
                         + body

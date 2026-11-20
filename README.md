@@ -96,6 +96,9 @@ cmake --build build-demo -j8
 `someip_fragmented_demo` 不需要套接字：一条 300 字节请求先经 E2E Profile 1 保护，
 再切成 19 个 TP 分段送进服务端，最后校验服务端回复的保护头与载荷。
 
+`someip_e2e_server_demo` / `someip_e2e_client_demo` 是同一份示例源码打开
+E2E Profile 1 编译出来的变体；配合探针的 `--e2e p1` 可以验证“保护 → 校验 → 剥离”整条链路。
+
 探针的 `--tp-chunk` 也可以配合 `--mode server` 使用：服务端把应答拆成 TP 分段，
 用来验证客户端方向的重组。
 

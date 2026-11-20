@@ -12,6 +12,7 @@
 
 #include "osp/log.hpp"
 #include "osp/someip/client.hpp"
+#include "osp/someip/e2e_profile1.hpp"
 #include "osp/someip/tp.hpp"
 #include "osp/someip/udp_link.hpp"
 
@@ -128,6 +129,13 @@ bool ParseOptions(int argc, char** argv, Options& options) noexcept {
 }
 
 /// @brief One socket per port: SD traffic on 30490, service traffic on the local port.
+#if defined(SOMEIP_DEMO_E2E)
+/// @brief Same demo with E2E Profile 1 enabled on requests and replies.
+using E2EPolicy = osp::someip::E2EProfile1<0x1234U>;
+#else
+using E2EPolicy = osp::someip::NoE2E;
+#endif
+
 struct ClientSink final {
   osp::UdpSocket* sd_socket{nullptr};
   osp::UdpSocket* service_socket{nullptr};
@@ -196,7 +204,7 @@ int main(int argc, char** argv) {
       options.use_multicast ? osp::someip::SdMulticastEndpoint()
                             : osp::someip::Ipv4Endpoint{options.server, osp::someip::kSdPort};
   // TP is enabled so a provider may answer with several segments.
-  osp::someip::Client<ClientSink, DemoHandler, 4U, 4U, 1400U, osp::someip::NoE2E, 8U,
+  osp::someip::Client<ClientSink, DemoHandler, 4U, 4U, 1400U, E2EPolicy, 8U,
                       8U, osp::someip::TpReassembly<2048U, 2U, 2000U>>
       client(sink, handler, local, server);
 

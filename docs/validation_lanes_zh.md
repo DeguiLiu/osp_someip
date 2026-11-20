@@ -72,6 +72,23 @@ python3 tools/sd_probe.py --mode server --service 1234 --seconds 6 &
     --port 30510 --service 1234 --method 0001 --seconds 3
 ```
 
+E2E 互通（Python 探针 ←→ C++ 示例，Profile 1）：
+
+```bash
+./build-demo/examples/someip_e2e_server_demo --iface 127.0.0.1 --seconds 8 &
+python3 tools/sd_probe.py --server 127.0.0.1 --service 1234 --method 0001 --e2e p1
+# 探针输出：e2e check=ok counter=1，response payload=11223344
+
+python3 tools/sd_probe.py --mode server --service 1234 --seconds 8 --e2e p1 &
+./build-demo/examples/someip_e2e_client_demo --server 127.0.0.1 --local 127.0.0.1 \
+    --port 30510 --service 1234 --method 0001 --seconds 5
+# 客户端输出：response 0x00010001, 4 payload bytes；探针输出：e2e check=ok counter=0
+```
+
+两个方向都验证了“保护 → 校验 → 剥离”这条完整路径。注意探针的事件发布不带 E2E，
+所以带 E2E 的客户端会把探针发出的事件判为校验失败并丢弃（输出 `received 0 event(s)`），
+这是符合预期的行为。
+
 SOME/IP-TP 互通（Python 探针 → C++ 服务端）：
 
 ```bash

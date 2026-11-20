@@ -12,6 +12,7 @@
 
 #include "osp/log.hpp"
 #include "osp/someip/server.hpp"
+#include "osp/someip/e2e_profile1.hpp"
 #include "osp/someip/tp.hpp"
 #include "osp/someip/udp_link.hpp"
 
@@ -94,6 +95,13 @@ bool CreateBound(std::uint16_t port, osp::UdpSocket& socket) noexcept {
 
 /// Routes SD traffic (port 30490) to the SD socket and everything else to the
 /// service socket, mirroring how a real node separates the two.
+#if defined(SOMEIP_DEMO_E2E)
+/// @brief Same demo with E2E Profile 1 enabled on requests and replies.
+using E2EPolicy = osp::someip::E2EProfile1<0x1234U>;
+#else
+using E2EPolicy = osp::someip::NoE2E;
+#endif
+
 struct DemoSink final {
   osp::UdpSocket* sd_socket{nullptr};
   osp::UdpSocket* service_socket{nullptr};
@@ -135,7 +143,7 @@ int main(int argc, char** argv) {
 
   DemoSink sink{&sd_socket, &service_socket};
   // TP is enabled so a client may split a request over several segments.
-  osp::someip::Server<DemoSink, 4U, 16U, 1400U, EchoHandler, osp::someip::NoE2E,
+  osp::someip::Server<DemoSink, 4U, 16U, 1400U, EchoHandler, E2EPolicy,
                       osp::someip::NoServiceObserver, 4U,
                       osp::someip::TpReassembly<2048U, 2U, 2000U>>
       server(sink);
