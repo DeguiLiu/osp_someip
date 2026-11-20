@@ -128,6 +128,9 @@ int main(int argc, char** argv) {
   if (!osp::someip::JoinSdMulticast(sd_socket, options.interface_address)) {
     OSP_LOG_WARN("someip", "multicast join failed; only unicast SD will be received");
   }
+  if (!osp::someip::SetSdMulticastInterface(sd_socket, options.interface_address)) {
+    OSP_LOG_WARN("someip", "multicast interface selection failed; SD uses the default route");
+  }
 
   DemoSink sink{&sd_socket, &service_socket};
   osp::someip::Server<DemoSink, 4U, 16U, 1400U, EchoHandler> server(sink);

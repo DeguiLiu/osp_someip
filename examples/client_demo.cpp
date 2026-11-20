@@ -31,6 +31,7 @@ struct Options final {
   std::uint16_t service_id{0x1234U};
   std::uint16_t method_id{0U};
   std::uint32_t seconds{10U};
+  bool use_multicast{false};
 };
 
 struct DemoHandler final {
@@ -112,6 +113,8 @@ bool ParseOptions(int argc, char** argv, Options& options) noexcept {
       options.method_id = static_cast<std::uint16_t>(std::strtoul(argv[++index], nullptr, 16));
     } else if (0 == std::strcmp(argv[index], "--seconds") && (index + 1) < argc) {
       options.seconds = static_cast<std::uint32_t>(std::strtoul(argv[++index], nullptr, 10));
+    } else if (0 == std::strcmp(argv[index], "--multicast")) {
+      options.use_multicast = true;
     } else {
       std::printf(
           "usage: %s --server IP [--local IP] [--port N] [--service HEX] [--method HEX]"
@@ -123,6 +126,36 @@ bool ParseOptions(int argc, char** argv, Options& options) noexcept {
   return true;
 }
 
+/// @brief One socket per port: SD traffic on 30490, service traffic on the local port.
+struct ClientSink final {
+  osp::UdpSocket* sd_socket{nullptr};
+  osp::UdpSocket* service_socket{nullptr};
+
+  void operator()(osp::span<const std::uint8_t> datagram,
+                  const osp::someip::Ipv4Endpoint& to) const noexcept {
+    osp::UdpSocket* socket =
+        (osp::someip::kSdPort == to.port) ? sd_socket : service_socket;
+    const auto address = osp::SocketAddress::FromIpv4Bytes(to.address, to.port);
+    if (address.has_value()) {
+      (void)socket->SendTo(datagram.data(), datagram.size(), address.value());
+    }
+  }
+};
+
+bool CreateBound(std::uint16_t port, osp::UdpSocket& socket) noexcept {
+  auto created = osp::UdpSocket::Create();
+  if (!created.has_value()) {
+    return false;
+  }
+  socket = std::move(created.value());
+  (void)socket.SetReuseAddress(true);
+  const auto address = osp::SocketAddress::FromIpv4("0.0.0.0", port);
+  if (!address.has_value() || !socket.Bind(address.value()).has_value()) {
+    return false;
+  }
+  return 0 == osp::SetFdNonBlocking(socket.Fd(), true);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -131,31 +164,30 @@ int main(int argc, char** argv) {
     return 2;
   }
 
-  auto created = osp::UdpSocket::Create();
-  if (!created.has_value()) {
-    std::printf("failed to create UDP socket\n");
-    return 1;
-  }
-  osp::UdpSocket socket = std::move(created.value());
-  (void)socket.SetReuseAddress(true);
-  const auto bind_address =
-      osp::SocketAddress::FromIpv4("0.0.0.0", options.local_port);
-  if (!bind_address.has_value() || !socket.Bind(bind_address.value()).has_value()) {
-    std::printf("failed to bind local UDP port %u\n",
+  osp::UdpSocket sd_socket;
+  osp::UdpSocket service_socket;
+  if (!CreateBound(osp::someip::kSdPort, sd_socket) ||
+      !CreateBound(options.local_port, service_socket)) {
+    std::printf("failed to bind UDP %u/%u\n",
+                static_cast<unsigned>(osp::someip::kSdPort),
                 static_cast<unsigned>(options.local_port));
     return 1;
   }
-  if (0 != osp::SetFdNonBlocking(socket.Fd(), true)) {
-    std::printf("failed to switch the socket to non-blocking\n");
-    return 1;
+  if (options.use_multicast) {
+    if (!osp::someip::JoinSdMulticast(sd_socket, options.local)) {
+      std::printf("failed to join the SD multicast group on the local interface\n");
+      return 1;
+    }
+    (void)osp::someip::SetSdMulticastInterface(sd_socket, options.local);
   }
 
-  osp::someip::UdpSender sink(socket);
+  ClientSink sink{&sd_socket, &service_socket};
   DemoHandler handler;
   const osp::someip::Ipv4Endpoint local{options.local, options.local_port};
-  const osp::someip::Ipv4Endpoint server{options.server, osp::someip::kSdPort};
-  osp::someip::Client<osp::someip::UdpSender, DemoHandler, 4U, 4U> client(sink, handler, local,
-                                                                         server);
+  const osp::someip::Ipv4Endpoint server =
+      options.use_multicast ? osp::someip::SdMulticastEndpoint()
+                            : osp::someip::Ipv4Endpoint{options.server, osp::someip::kSdPort};
+  osp::someip::Client<ClientSink, DemoHandler, 4U, 4U> client(sink, handler, local, server);
 
   if (!client.StartFind(options.service_id, 0U)) {
     std::printf("failed to start the find sequence\n");
@@ -173,14 +205,17 @@ int main(int argc, char** argv) {
 
     std::uint8_t buffer[1500] = {};
     osp::SocketAddress from;
-    for (;;) {
-      const auto received = socket.RecvFrom(buffer, sizeof(buffer), from);
-      if (!received.has_value()) {
-        break;
+    for (std::uint32_t pass = 0U; pass < 2U; ++pass) {
+      osp::UdpSocket& socket = (0U == pass) ? sd_socket : service_socket;
+      for (;;) {
+        const auto received = socket.RecvFrom(buffer, sizeof(buffer), from);
+        if (!received.has_value()) {
+          break;
+        }
+        client.HandleDatagram(
+            osp::span<const std::uint8_t>(buffer, static_cast<std::size_t>(received.value())),
+            osp::someip::EndpointOf(from), now_ms);
       }
-      client.HandleDatagram(
-          osp::span<const std::uint8_t>(buffer, static_cast<std::size_t>(received.value())),
-          osp::someip::EndpointOf(from), now_ms);
     }
     client.Tick(now_ms);
 

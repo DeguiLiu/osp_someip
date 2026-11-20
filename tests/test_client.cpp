@@ -363,14 +363,53 @@ TEST_CASE("client - sender reboot drops the caches", "[client]") {
 
   const std::uint32_t second =
       BuildOfferWithSession(offer, 30U, SessionWith(11U, RebootFlag::kContinuous));
-  client.HandleDatagram(osp::make_span(offer, second), source, 10U);
+  client.HandleDatagram(osp::make_span(offer, second), source, 1000U);
   REQUIRE(0U == handler.reboots);
 
   const std::uint32_t rebooted =
-      BuildOfferWithSession(offer, 30U, SessionWith(3U, RebootFlag::kRecentlyRebooted));
-  client.HandleDatagram(osp::make_span(offer, rebooted), source, 20U);
+      BuildOfferWithSession(offer, 30U, SessionWith(1U, RebootFlag::kRecentlyRebooted));
+  client.HandleDatagram(osp::make_span(offer, rebooted), source, 5000U);
   REQUIRE(1U == handler.reboots);
   REQUIRE(1U == handler.gone);
   REQUIRE(2U == handler.available);
   REQUIRE(1U == client.ServiceCount());  // the rebooted offer re-populates the cache
+}
+
+TEST_CASE("client - a repeated session id is not a restart", "[client]") {
+  Sink sink;
+  Handler handler;
+  Client<Sink, Handler, 4U, 2U> client(sink, handler, {{127U, 0U, 0U, 1U}, 30510U});
+  const Ipv4Endpoint source{{127U, 0U, 0U, 2U}, 30490U};
+  std::uint8_t offer[128] = {};
+
+  const std::uint32_t first =
+      BuildOfferWithSession(offer, 30U, SessionWith(7U, RebootFlag::kRecentlyRebooted));
+  client.HandleDatagram(osp::make_span(offer, first), source, 0U);
+  REQUIRE(0U == handler.reboots);
+
+  // The same message arrives again, unicast after multicast; the reboot flag is
+  // still set because the peer has not wrapped its session counter yet.
+  client.HandleDatagram(osp::make_span(offer, first), source, 10U);
+  REQUIRE(0U == handler.reboots);
+  REQUIRE(1U == client.ServiceCount());
+}
+
+TEST_CASE("client - a quick session drop is not a restart", "[client]") {
+  Sink sink;
+  Handler handler;
+  Client<Sink, Handler, 4U, 2U> client(sink, handler, {{127U, 0U, 0U, 1U}, 30510U});
+  const Ipv4Endpoint source{{127U, 0U, 0U, 2U}, 30490U};
+  std::uint8_t offer[128] = {};
+
+  // vsomeip numbers the offers it sends in reply to a find from 1 again, so a
+  // healthy peer looks like it restarted unless the drop follows real silence.
+  const std::uint32_t cyclic =
+      BuildOfferWithSession(offer, 30U, SessionWith(10U, RebootFlag::kRecentlyRebooted));
+  client.HandleDatagram(osp::make_span(offer, cyclic), source, 0U);
+
+  const std::uint32_t reply =
+      BuildOfferWithSession(offer, 30U, SessionWith(1U, RebootFlag::kRecentlyRebooted));
+  client.HandleDatagram(osp::make_span(offer, reply), source, 100U);
+  REQUIRE(0U == handler.reboots);
+  REQUIRE(1U == client.ServiceCount());
 }

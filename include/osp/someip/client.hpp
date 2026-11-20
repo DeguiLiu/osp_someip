@@ -52,6 +52,10 @@ class Client final {
  public:
   static constexpr std::uint32_t kFindRepetitions = 3U;
   static constexpr std::uint32_t kFindBaseDelayMs = 100U;
+  /// @brief Session IDs start here after a reboot.
+  static constexpr std::uint16_t kFirstSession = 1U;
+  /// @brief Silence that separates a reboot from a reordered duplicate.
+  static constexpr std::uint32_t kRebootQuietMs = 2000U;
 
   /// @brief A service learned from an OfferService entry.
   struct RemoteService final {
@@ -304,6 +308,7 @@ class Client final {
   struct PeerSlot final {
     Ipv4Endpoint source{};
     std::uint16_t session{0U};
+    std::uint32_t last_ms{0U};
     bool active{false};
   };
 
@@ -356,13 +361,25 @@ class Client final {
 
   /// @brief Records the sender's SD session; true when it restarted.
   bool TrackSession(const Ipv4Endpoint& source, std::uint16_t session,
-                    sd::Flags flags) noexcept {
+                    sd::Flags flags, std::uint32_t now_ms) noexcept {
     PeerSlot* free_slot = nullptr;
     for (auto& slot : peers_) {
       if (slot.active && slot.source == source) {
+        // The same offer can arrive twice, unicast and over multicast, and the
+        // two copies may be reordered; a low session ID alone is not a reboot.
+        // A peer that restarts while its reboot flag is still set starts again
+        // at kFirstSession, which is the signal used here.
+        // vsomeip answers a FindService with its own offer counter, so the
+        // session ID drops back to 1 while the peer is perfectly healthy; only
+        // a drop after real silence is taken as a reboot.
+        const bool quiet = (now_ms - slot.last_ms) >= kRebootQuietMs;
         const bool rebooted =
-            (sd::RebootFlag::kRecentlyRebooted == flags.Reboot()) && (session <= slot.session);
-        slot.session = session;
+            (sd::RebootFlag::kRecentlyRebooted == flags.Reboot()) &&
+            (session <= kFirstSession) && (slot.session > kFirstSession) && quiet;
+        slot.last_ms = now_ms;
+        if (rebooted || session > slot.session) {
+          slot.session = session;
+        }
         return rebooted;
       }
       if (!slot.active && nullptr == free_slot) {
@@ -372,6 +389,7 @@ class Client final {
     if (nullptr != free_slot) {
       free_slot->source = source;
       free_slot->session = session;
+      free_slot->last_ms = now_ms;
       free_slot->active = true;
     }
     return false;
@@ -447,7 +465,7 @@ class Client final {
     }
     const std::uint16_t session =
         static_cast<std::uint16_t>(message.Head().RequestId() & 0xFFFFU);
-    if (TrackSession(source, session, sd_header.value().GetFlags())) {
+    if (TrackSession(source, session, sd_header.value().GetFlags(), now_ms)) {
       HandleSenderReboot(source);
     }
     sd::EntryView entry;
