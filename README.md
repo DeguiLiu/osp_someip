@@ -25,6 +25,7 @@ SOME/IP 协议栈，C++17 头文件库，面向嵌入式 Linux 与 RT-Thread，�
 - E2E：策略模板，发送前 Protect、接收时 Check，校验失败丢弃；默认 `NoE2E`，不产生开销。
   内置 Profile 1（CRC-8 SAE J1850 + 4 位计数器 + 数据 ID）。
 - 内存：容器容量由模板参数给定，解析结果是调用方缓冲区上的视图，全链路不分配堆内存。
+  默认服务端实例约 2.1 KB、客户端约 2.7 KB，TP 重组按容量另算。
 - 构建：`-fno-exceptions -fno-rtti` 下可用。
 
 ## 快速开始

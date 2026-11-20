@@ -9,9 +9,12 @@
  */
 
 #include "osp/someip/client.hpp"
+#include "osp/someip/e2e_profile1.hpp"
 #include "osp/someip/sd_codec.hpp"
 #include "osp/someip/server.hpp"
+#include "osp/someip/tp.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -132,6 +135,75 @@ int main() {
   ok = ok && request_size.has_value();
   server.HandleDatagram(osp::make_span(request_bytes, request_size.value()), client, 40U);
   ok = ok && 5U == sink.datagrams;
+
+  // A reassembled TP request and an E2E-protected request go through the same
+  // dispatch path; both have to stay allocation free.
+  {
+    Sink tp_sink;
+    osp::someip::Server<Sink, 2U, 2U, 512U, EchoRequestHandler, osp::someip::NoE2E,
+                        osp::someip::NoServiceObserver, 2U,
+                        osp::someip::TpReassembly<128U, 1U, 1000U>>
+        tp_server(tp_sink);
+    std::uint8_t segment[128] = {};
+    const std::uint8_t tp_payload[24] = {1U, 2U, 3U, 4U, 5U, 6U, 7U, 8U,
+                                         9U, 10U, 11U, 12U, 13U, 14U, 15U, 16U,
+                                         17U, 18U, 19U, 20U, 21U, 22U, 23U, 24U};
+    const auto build_segment = [&segment](std::uint32_t offset, bool more,
+                                          osp::span<const std::uint8_t> data) {
+      const osp::someip::Header header = osp::someip::Header::New(
+          osp::someip::MessageId::FromServiceAndMethod(0x1234U, 0x0001U), 0x00010009U, 0x01U,
+          0x01U, osp::someip::MessageTypeField::New(osp::someip::MessageType::kRequest, true),
+          osp::someip::ReturnCode::Ok(),
+          static_cast<std::uint32_t>(osp::someip::TpHeader::kSize + data.size()));
+      (void)header.EncodeTo(osp::make_span(segment, osp::someip::kHeaderSize));
+      (void)osp::someip::TpHeader::Write(
+          osp::make_span(segment + osp::someip::kHeaderSize, osp::someip::TpHeader::kSize),
+          offset, more);
+      for (std::size_t index = 0U; index < data.size(); ++index) {
+        segment[osp::someip::kHeaderSize + osp::someip::TpHeader::kSize + index] = data[index];
+      }
+      return osp::someip::kHeaderSize + osp::someip::TpHeader::kSize +
+             static_cast<std::uint32_t>(data.size());
+    };
+
+    const std::uint32_t first =
+        build_segment(0U, true, osp::make_span(tp_payload, 16U));
+    tp_server.HandleDatagram(osp::make_span(segment, first), client, 50U);
+    ok = ok && 0U == tp_sink.datagrams;
+    const std::uint32_t second =
+        build_segment(16U, false, osp::make_span(tp_payload + 16U, 8U));
+    tp_server.HandleDatagram(osp::make_span(segment, second), client, 60U);
+    ok = ok && 1U == tp_sink.datagrams;
+  }
+
+  {
+    using Profile = osp::someip::E2EProfile1<0x1234U>;
+    Sink e2e_sink;
+    osp::someip::Server<Sink, 2U, 2U, 256U, EchoRequestHandler, Profile> e2e_server(e2e_sink);
+    Profile protector;
+    std::uint8_t protected_payload[16] = {};
+    const std::uint8_t e2e_payload[4] = {0xDEU, 0xADU, 0xBEU, 0xEFU};
+    for (std::size_t index = 0U; index < sizeof(e2e_payload); ++index) {
+      protected_payload[index] = e2e_payload[index];
+    }
+    const std::array<std::uint8_t, 8U> upper{0U, 1U, 0U, 1U, 1U, 1U, 0U, 0U};
+    const auto protected_body = protector.Protect(
+        osp::someip::MessageId(0x12340001U), upper, osp::make_span(protected_payload),
+        sizeof(e2e_payload));
+    ok = ok && (sizeof(e2e_payload) + Profile::kHeaderSize) == protected_body.size();
+
+    std::uint8_t e2e_bytes[64] = {};
+    const osp::someip::Header e2e_header = osp::someip::Header::New(
+        osp::someip::MessageId::FromServiceAndMethod(0x1234U, 0x0001U), 0x0001000AU, 0x01U, 0x01U,
+        osp::someip::MessageTypeField::New(osp::someip::MessageType::kRequest, false),
+        osp::someip::ReturnCode::Ok(), static_cast<std::uint32_t>(protected_body.size()));
+    const osp::someip::Message<osp::someip::OpaquePayload> e2e_request(
+        e2e_header, osp::someip::OpaquePayload(protected_body));
+    const auto e2e_size = e2e_request.EncodeTo(osp::make_span(e2e_bytes));
+    ok = ok && e2e_size.has_value();
+    e2e_server.HandleDatagram(osp::make_span(e2e_bytes, e2e_size.value()), client, 70U);
+    ok = ok && 1U == e2e_sink.datagrams;
+  }
 
   NullHandler handler;
   const osp::someip::Ipv4Endpoint local{{127U, 0U, 0U, 3U}, 30511U};

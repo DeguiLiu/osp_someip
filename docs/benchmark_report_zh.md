@@ -63,7 +63,32 @@ qemu 用户态把每条访存与系统调用都翻译一遍，p99 的抖动主�
 4. 目标板（ARM/RT-Thread）与 vsomeip 对端数据仍待环境验证，见
    [validation_lanes_zh.md](validation_lanes_zh.md)。qemu 数据只代表指令集可执行。
 
-## 5. 后续
+## 5. 内存与体积
+
+`sizeof` 在 x86 与 aarch64 上一致（同属 LP64，且容器全是定容数组）：
+
+| 类型 | 字节 |
+|---|---|
+| `Server<Sink>`（8 offer / 16 订阅 / 1400 字节数据报缓冲 / 8 个远端服务） | 2168 |
+| `Server` 加上 `TpReassembly<4096, 1>` | 6304 |
+| `Client<Sink, Handler>`（默认容量） | 2704 |
+| `TpReassembly<4096, 1>` | 4140 |
+| `E2EProfile1<DataId>` | 3 |
+
+TP 重组的内存按 `MaxSessions * (MaxPayload + 16)` 计算，不启用 `TpReassembly` 时不占空间。
+
+aarch64 示例程序（动态链接，含 `printf`/日志等演示代码）：
+
+| 程序 | text | data | bss |
+|---|---|---|---|
+| `someip_server_demo` | 20,924 | 944 | 8 |
+| `someip_client_demo` | 21,079 | 936 | 8 |
+| `someip_loopback_bench` | 28,059 | 880 | 32 |
+
+测量方式：`aarch64-linux-gnu-size`（交叉包内 binutils）。库本身是头文件，
+这组数字主要是示例与 newosp 日志的固定开销，不代表集成到目标固件后的增量。
+
+## 6. 后续
 
 1. 在 ARM 目标板重复同一基准，记录主频与 `size` 结果。
 2. Docker/vsomeip 可用后，补一条跨实现 RPC 时延对比。

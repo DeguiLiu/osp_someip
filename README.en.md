@@ -26,7 +26,8 @@ third-party interop are covered in "Status and limits".
 - E2E: policy template with Protect on send and Check on receive; failed checks drop the message.
   The default `NoE2E` costs nothing; Profile 1 (CRC-8 SAE J1850, 4-bit counter, data ID) is built in.
 - Memory: capacities are template parameters, parse results are views over caller-owned buffers, and
-  the whole path avoids heap allocation.
+  the whole path avoids heap allocation. A default server instance is about 2.1 KB, a client about
+  2.7 KB; TP reassembly adds its own buffer.
 - Builds with `-fno-exceptions -fno-rtti`.
 
 ## Quick start
