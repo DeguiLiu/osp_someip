@@ -160,6 +160,18 @@ ctest --test-dir build/aarch64-tests
 `qemu-aarch64 -L <root>/usr/aarch64-linux-gnu`，CTest 因此可以直接运行目标二进制。
 `LD_LIBRARY_PATH` 是解包后的 binutils 依赖，只在构建时需要。
 
+同一份工具链文件也支持发行版安装的交叉编译器（CI 走这条路径）：
+
+```bash
+sudo apt install g++-aarch64-linux-gnu qemu-user
+cmake -S . -B build/aarch64 \
+    -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/aarch64-linux-gnu.cmake \
+    -DCMAKE_BUILD_TYPE=Release -DSOMEIP_BUILD_TESTS=ON
+cmake --build build/aarch64 -j8 && ctest --test-dir build/aarch64
+```
+
+两条路径都在本机各跑过一遍：133 项，1 项跳过（组播），其余全过。
+
 结果：131 个用例通过，1 个跳过（组播），`someip_loopback_bench` 为
 p50 11 µs、p99 24 µs、约 6.6 万次请求/秒。这是 qemu 用户态模拟，不是板上数据。
 

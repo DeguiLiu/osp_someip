@@ -73,3 +73,23 @@ jobs:
         run: tools/check_rtthread.sh g++ /tmp/newosp/include
       - name: lwIP socket backend
         run: tools/check_lwip.sh g++ /tmp/lwip /tmp/newosp/include
+
+  aarch64:
+    name: aarch64 cross build (qemu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cross toolchain and qemu
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-aarch64-linux-gnu qemu-user
+      - name: Configure
+        run: |
+          cmake -S . -B build/aarch64 \
+              -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/aarch64-linux-gnu.cmake \
+              -DCMAKE_BUILD_TYPE=Release -DSOMEIP_BUILD_TESTS=ON \
+              -DSOMEIP_FETCH_NEWOSP=ON
+      - name: Build
+        run: cmake --build build/aarch64 -j
+      - name: Test
+        run: ctest --test-dir build/aarch64 --output-on-failure
