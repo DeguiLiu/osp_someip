@@ -1,0 +1,58 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  host:
+    name: host tests (${{ matrix.preset }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [host-debug, host-release, noexc]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }} -DSOMEIP_FETCH_NEWOSP=ON
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }} -j
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }}
+
+  sanitizers:
+    name: asan + ubsan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake --preset asan -DSOMEIP_FETCH_NEWOSP=ON
+      - name: Build
+        run: cmake --build --preset asan -j
+      - name: Test
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+        run: ctest --preset asan
+
+  examples:
+    name: examples and benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake --preset demo -DSOMEIP_FETCH_NEWOSP=ON
+      - name: Build
+        run: cmake --build --preset demo -j
+      - name: Loopback benchmark
+        run: ./build/demo/examples/someip_loopback_bench
+
+  lint:
+    name: cpplint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cpplint
+        run: pip install cpplint
+      - name: Run cpplint
+        run: cpplint --recursive include/osp/someip tests examples

@@ -1,0 +1,93 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 19,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "host-debug",
+      "displayName": "Host debug (tests on)",
+      "binaryDir": "${sourceDir}/build/host-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SOMEIP_BUILD_TESTS": "ON",
+        "OSP_GITHUB_MIRROR": "$env{OSP_GITHUB_MIRROR}"
+      }
+    },
+    {
+      "name": "host-release",
+      "displayName": "Host release (tests on)",
+      "binaryDir": "${sourceDir}/build/host-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SOMEIP_BUILD_TESTS": "ON",
+        "OSP_GITHUB_MIRROR": "$env{OSP_GITHUB_MIRROR}"
+      }
+    },
+    {
+      "name": "noexc",
+      "displayName": "Host release, no exceptions / no RTTI",
+      "binaryDir": "${sourceDir}/build/noexc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SOMEIP_BUILD_TESTS": "ON",
+        "SOMEIP_NO_EXCEPTIONS": "ON",
+        "OSP_GITHUB_MIRROR": "$env{OSP_GITHUB_MIRROR}"
+      }
+    },
+    {
+      "name": "asan",
+      "displayName": "Host debug with ASan + UBSan",
+      "binaryDir": "${sourceDir}/build/asan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SOMEIP_BUILD_TESTS": "ON",
+        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer",
+        "OSP_GITHUB_MIRROR": "$env{OSP_GITHUB_MIRROR}"
+      }
+    },
+    {
+      "name": "demo",
+      "displayName": "Release examples, no tests",
+      "binaryDir": "${sourceDir}/build/demo",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SOMEIP_BUILD_TESTS": "OFF",
+        "SOMEIP_BUILD_EXAMPLES": "ON",
+        "SOMEIP_NO_EXCEPTIONS": "ON",
+        "OSP_GITHUB_MIRROR": "$env{OSP_GITHUB_MIRROR}"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "host-debug", "configurePreset": "host-debug" },
+    { "name": "host-release", "configurePreset": "host-release" },
+    { "name": "noexc", "configurePreset": "noexc" },
+    { "name": "asan", "configurePreset": "asan" },
+    { "name": "demo", "configurePreset": "demo" }
+  ],
+  "testPresets": [
+    {
+      "name": "host-debug",
+      "configurePreset": "host-debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "host-release",
+      "configurePreset": "host-release",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "noexc",
+      "configurePreset": "noexc",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "asan",
+      "configurePreset": "asan",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}

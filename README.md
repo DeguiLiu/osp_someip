@@ -90,6 +90,16 @@ python3 tools/sd_probe.py --server 127.0.0.1 --service 1234 --method 0001
 与一份独立实现的字节构造完全一致。
 
 newosp 头文件默认取 `../newosp/include`，可用 `-DOSP_INCLUDE_DIR=<path>` 覆盖。
+没有同级 newosp 时加 `-DSOMEIP_FETCH_NEWOSP=ON`，构建会从 GitHub 拉取。
+
+预设（CMakePresets.json）：`host-debug`、`host-release`、`noexc`、`asan`、`demo`。
+
+```bash
+cmake --preset host-debug && cmake --build --preset host-debug -j8
+ctest --preset host-debug
+```
+
+CI 模板见 `.github/workflows/ci.yml`（主机三档 + sanitizer + 示例/基准 + cpplint）。
 
 ## 设计要点
 
