@@ -21,8 +21,21 @@ setarch $(uname -m) -R env ASAN_OPTIONS=detect_leaks=1 ./build-asan/tests/someip
 ./build/tests/someip_no_alloc          # exit 0 表示零分配
 ```
 
-验收：119 个用例 / 12716 条断言全过；sanitizer 无报告；零分配进程返回 0；
+验收：123 个用例 / 12851 条断言全过；sanitizer 无报告；零分配进程返回 0；
 `someip_headers_self_contained` 把 26 个公开头文件逐个单独编译，全部通过。
+
+覆盖率只作趋势参考，不作为门禁：
+
+```bash
+cmake -S . -B build/coverage -DCMAKE_BUILD_TYPE=Debug -DSOMEIP_BUILD_TESTS=ON \
+    -DCMAKE_CXX_FLAGS="--coverage -O0" -DCMAKE_EXE_LINKER_FLAGS="--coverage"
+cmake --build build/coverage -j8 && ctest --test-dir build/coverage
+gcovr -r . --filter 'include/osp/someip/' --txt-summary build/coverage
+```
+
+当前结果：行 59.0%、函数 73.0%、分支 37.5%。`server.hpp` / `client.hpp` 是模板，
+每个 TU 各实例化一次、gcov 按实例计数，所以这两项偏低；单个头文件里 `header.hpp`、
+`udp_link.hpp` 为 100%，`sd/option_view.hpp` 为 97%。
 
 CI 同路径（干净目录、拉取上游 newosp 而不是用同级目录）也跑过一遍：
 
@@ -142,7 +155,7 @@ ctest --test-dir build/aarch64-tests
 `qemu-aarch64 -L <root>/usr/aarch64-linux-gnu`，CTest 因此可以直接运行目标二进制。
 `LD_LIBRARY_PATH` 是解包后的 binutils 依赖，只在构建时需要。
 
-结果：117 个用例通过，1 个跳过（组播），`someip_loopback_bench` 为
+结果：121 个用例通过，1 个跳过（组播），`someip_loopback_bench` 为
 p50 11 µs、p99 24 µs、约 6.6 万次请求/秒。这是 qemu 用户态模拟，不是板上数据。
 
 两个示例程序也在 qemu 下跑通了完整链路（等同板上冒烟的命令）：

@@ -114,7 +114,15 @@ class EntryView final {
     group.event_group_id = EventGroupId();
     group.index_first_options_run = IndexFirstOptionsRun();
     group.index_second_options_run = IndexSecondOptionsRun();
-    return (Entry::Kind::kSubscribeNack == Kind()) ? Entry::Nack(group) : Entry::Ack(group);
+    switch (Kind()) {
+      case Entry::Kind::kSubscribe:
+        return Entry::Subscribe(group);
+      case Entry::Kind::kSubscribeNack:
+        return Entry::Nack(group);
+      case Entry::Kind::kSubscribeAck:
+      default:
+        return Entry::Ack(group);
+    }
   }
 
  private:

@@ -236,3 +236,208 @@ TEST_CASE("sd parse - non-SD message has no SD header", "[sd][parse]") {
   REQUIRE_FALSE(sd.has_value());
   REQUIRE(ErrorCode::kNotSdMessage == sd.get_error().code);
 }
+
+namespace {
+
+template <typename Check>
+void RoundTripThroughView(const osp::someip::sd::Options& option, Check check) {
+  std::uint8_t encoded[64] = {};
+  const auto written = option.EncodeTo(osp::make_span(encoded));
+  REQUIRE(written.has_value());
+  const auto parsed = OptionView::Parse(osp::span<const std::uint8_t>(encoded, written.value()));
+  REQUIRE(parsed.has_value());
+  const OptionView view = parsed.value().view;
+  REQUIRE(view.IsKnown());
+  REQUIRE(static_cast<std::uint8_t>(option.Type()) == view.RawType());
+  REQUIRE(written.value() == view.WireSize());
+  check(view);
+
+  const auto rebuilt = view.ToOptions();
+  REQUIRE(rebuilt.has_value());
+  std::uint8_t again[64] = {};
+  const auto written_again = rebuilt.value().EncodeTo(osp::make_span(again));
+  REQUIRE(written_again.has_value());
+  REQUIRE(written.value() == written_again.value());
+  REQUIRE(0 == std::memcmp(encoded, again, written.value()));
+}
+
+constexpr std::array<std::uint8_t, 16U> kIpV6{0x20U, 0x01U, 0x0DU, 0xB8U, 0U, 0U, 0U, 0U,
+                                              0U, 0U, 0U, 0U, 0U, 0U, 0U, 0x01U};
+
+}  // namespace
+
+TEST_CASE("sd parse - every option kind round trips through the view", "[sd][parse]") {
+  using osp::someip::sd::Options;
+  using osp::someip::sd::OptionType;
+  using osp::someip::sd::TransportProtocol;
+  const std::array<std::uint8_t, 4U> ipv4{10U, 0U, 0U, 1U};
+  const std::array<std::uint8_t, 3U> text{'a', 'b', 'c'};
+
+  RoundTripThroughView(Options::Configuration(osp::span<const std::uint8_t>(text.data(), text.size())),
+                       [&text](const OptionView& view) {
+                         REQUIRE(text.size() == view.Configuration().size());
+                         REQUIRE(0 == std::memcmp(text.data(), view.Configuration().data(),
+                                                  text.size()));
+                       });
+  RoundTripThroughView(Options::LoadBalancing(0x0102U, 0x0304U),
+                       [](const OptionView& view) {
+                         REQUIRE(0x0102U == view.Priority());
+                         REQUIRE(0x0304U == view.Weight());
+                       });
+  RoundTripThroughView(Options::IpV4Endpoint(ipv4, TransportProtocol::kUdp, 30490U),
+                       [&ipv4](const OptionView& view) {
+                         REQUIRE(OptionType::kIpV4Endpoint == view.Type());
+                         REQUIRE(ipv4 == view.AddressV4());
+                         REQUIRE(TransportProtocol::kUdp == view.Protocol());
+                         REQUIRE(30490U == view.Port());
+                       });
+  RoundTripThroughView(Options::IpV6Endpoint(kIpV6, TransportProtocol::kTcp, 443U),
+                       [](const OptionView& view) {
+                         REQUIRE(OptionType::kIpV6Endpoint == view.Type());
+                         REQUIRE(kIpV6 == view.AddressV6());
+                         REQUIRE(TransportProtocol::kTcp == view.Protocol());
+                         REQUIRE(443U == view.Port());
+                       });
+  RoundTripThroughView(Options::IpV4Multicast(ipv4, TransportProtocol::kUdp, 30491U),
+                       [&ipv4](const OptionView& view) {
+                         REQUIRE(OptionType::kIpV4Multicast == view.Type());
+                         REQUIRE(ipv4 == view.AddressV4());
+                         REQUIRE(30491U == view.Port());
+                       });
+  RoundTripThroughView(Options::IpV6Multicast(kIpV6, TransportProtocol::kUdp, 5353U),
+                       [](const OptionView& view) {
+                         REQUIRE(OptionType::kIpV6Multicast == view.Type());
+                         REQUIRE(kIpV6 == view.AddressV6());
+                         REQUIRE(5353U == view.Port());
+                       });
+  RoundTripThroughView(Options::IpV4Sd(ipv4, TransportProtocol::kTcp, 30492U),
+                       [&ipv4](const OptionView& view) {
+                         REQUIRE(OptionType::kIpV4Sd == view.Type());
+                         REQUIRE(ipv4 == view.AddressV4());
+                         REQUIRE(TransportProtocol::kTcp == view.Protocol());
+                         REQUIRE(30492U == view.Port());
+                       });
+  RoundTripThroughView(Options::IpV6Sd(kIpV6, TransportProtocol::kUdp, 30493U),
+                       [](const OptionView& view) {
+                         REQUIRE(OptionType::kIpV6Sd == view.Type());
+                         REQUIRE(kIpV6 == view.AddressV6());
+                         REQUIRE(30493U == view.Port());
+                       });
+}
+
+TEST_CASE("sd parse - event group entries round trip through the view", "[sd][parse]") {
+  using osp::someip::sd::EventGroupEntry;
+  using osp::someip::sd::OptionsCount;
+
+  EventGroupEntry payload;
+  payload.options_count = OptionsCount(1U, 0U);
+  payload.service_id = 0x1234U;
+  payload.instance_id = 0x0001U;
+  payload.major_version = 1U;
+  payload.ttl = 5U;
+  payload.counter = 3U;
+  payload.event_group_id = 0x0002U;
+  payload.index_first_options_run = 0U;
+  payload.index_second_options_run = 0U;
+
+  EventGroupEntry rejected = payload;
+  rejected.ttl = 0U;  // a zero TTL is what separates a Nack from an Ack on the wire
+  const Entry entries[3] = {Entry::Subscribe(payload), Entry::Ack(payload),
+                            Entry::Nack(rejected)};
+  for (const Entry& entry : entries) {
+    std::uint8_t encoded[osp::someip::sd::kEntrySize] = {};
+    const auto written = entry.EncodeTo(osp::make_span(encoded));
+    REQUIRE(written.has_value());
+    const auto view = EntryView::Parse(osp::span<const std::uint8_t>(encoded));
+    REQUIRE(view.has_value());
+    REQUIRE(static_cast<int>(entry.Type()) == static_cast<int>(view.value().Kind()));
+    REQUIRE(payload.service_id == view.value().ServiceId());
+    REQUIRE(payload.event_group_id == view.value().EventGroupId());
+    REQUIRE(payload.counter == view.value().Counter());
+
+    INFO("wire type " << static_cast<int>(encoded[0U]));
+    const Entry rebuilt = view.value().ToEntry();
+    std::uint8_t again[osp::someip::sd::kEntrySize] = {};
+    const auto written_again = rebuilt.EncodeTo(osp::make_span(again));
+    REQUIRE(written_again.has_value());
+    REQUIRE(0 == std::memcmp(encoded, again, sizeof(encoded)));
+  }
+}
+
+TEST_CASE("sd header - short buffers are rejected", "[sd][header]") {
+  using osp::someip::sd::Header;
+  using osp::someip::sd::Flags;
+  using osp::someip::sd::Options;
+  using osp::someip::sd::RebootFlag;
+  osp::someip::sd::ServiceEntry service;
+  service.options_count = osp::someip::sd::OptionsCount(1U, 0U);
+  service.service_id = 0x1234U;
+  service.instance_id = 0x0001U;
+  service.major_version = 1U;
+  service.ttl = 3U;
+  const Entry entries[1] = {Entry::Offer(service)};
+  const std::array<std::uint8_t, 2U> text{'o', 'k'};
+  const Options options[1] = {
+      Options::Configuration(osp::span<const std::uint8_t>(text.data(), text.size()))};
+  const Header header(Flags::NewSd(RebootFlag::kContinuous), osp::make_span(entries),
+                      osp::make_span(options));
+  std::uint8_t buffer[64] = {};
+  REQUIRE(header.EncodedSize() <= sizeof(buffer));
+
+  const auto tiny = header.EncodeTo(osp::make_span(buffer, 4U));
+  REQUIRE(!tiny.has_value());
+  REQUIRE(osp::someip::ErrorCode::kInsufficientBuffer == tiny.get_error().code);
+
+  const auto almost = header.EncodeTo(osp::make_span(buffer, header.EncodedSize() - 1U));
+  REQUIRE(!almost.has_value());
+  REQUIRE(osp::someip::ErrorCode::kInsufficientBuffer == almost.get_error().code);
+
+  REQUIRE(header.EncodeTo(osp::make_span(buffer)).has_value());
+}
+
+TEST_CASE("sd codec - invalid TTL and short buffers are rejected", "[sd][codec]") {
+  using osp::someip::ErrorCode;
+  const auto session = osp::someip::sd::SdSessionCounter::New().Next();
+  std::uint8_t buffer[128] = {};
+
+  osp::someip::OfferServiceRequest offer;
+  offer.service_id = 0x1234U;
+  offer.instance_id = 0x0001U;
+  offer.major_version = 1U;
+  offer.ttl = osp::someip::sd::kMaxTtl + 1U;
+  offer.local_ip = {127U, 0U, 0U, 1U};
+  offer.unicast_port = 30509U;
+  const auto bad_offer =
+      osp::someip::BuildOfferServiceDatagram(osp::make_span(buffer), offer, session);
+  REQUIRE(!bad_offer.has_value());
+  REQUIRE(ErrorCode::kInvalidTtl == bad_offer.get_error().code);
+
+  osp::someip::SubscribeEventGroupRequest subscribe;
+  subscribe.service_id = 0x1234U;
+  subscribe.instance_id = 0x0001U;
+  subscribe.major_version = 1U;
+  subscribe.event_group_id = 0x0001U;
+  subscribe.ttl = osp::someip::sd::kMaxTtl + 1U;
+  subscribe.local_ip = {127U, 0U, 0U, 1U};
+  subscribe.local_rx_port = 30510U;
+  const auto bad_subscribe = osp::someip::BuildSubscribeEventGroupDatagram(
+      osp::make_span(buffer), subscribe, session);
+  REQUIRE(!bad_subscribe.has_value());
+  REQUIRE(ErrorCode::kInvalidTtl == bad_subscribe.get_error().code);
+
+  osp::someip::SubscribeAckRequest ack;
+  ack.service_id = 0x1234U;
+  ack.instance_id = 0x0001U;
+  ack.major_version = 1U;
+  ack.event_group_id = 0x0001U;
+  ack.ttl = osp::someip::sd::kMaxTtl + 1U;
+  const auto bad_ack =
+      osp::someip::BuildSubscribeAckDatagram(osp::make_span(buffer), ack, session);
+  REQUIRE(!bad_ack.has_value());
+  REQUIRE(ErrorCode::kInvalidTtl == bad_ack.get_error().code);
+
+  const auto small =
+      osp::someip::BuildFindServiceDatagram(osp::make_span(buffer, 8U), 0x1234U, session);
+  REQUIRE(!small.has_value());
+  REQUIRE(ErrorCode::kInsufficientBuffer == small.get_error().code);
+}
