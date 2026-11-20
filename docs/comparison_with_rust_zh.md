@@ -27,7 +27,7 @@ SOME/IP-TP 重组、E2E Profile 1、真实网卡组播与 vsomeip 双向互操�
 | 服务端请求分发 | 非 SD 原始数据报回调 | `RequestHandler` 类型化分发并自动回 Response/Error | 本项目支持 fire-and-forget |
 | 服务观察 | 有（`with_service_observer`） | 有（`Observer` 模板：远端 offer 可用 / 消失） | 仅上报变化，不缓存给业务 |
 | 客户端发现 / 订阅 / RPC | 有（async，自动续订、重启检测） | 有（回调 + 超时 + 续订 + 可用性 + 重启检测） | 请求 ID 规则一致：client<<16 \| session |
-| E2E 保护 | 仅 `E2EHandle` trait 钩子 | 策略钩子 + 内置 Profile 1/4/7 | 本项目带三个可直接用的 profile |
+| E2E 保护 | 仅 `E2EHandle` trait 钩子 | 策略钩子 + 内置 Profile 1/4/5/7 | 本项目带四个可直接用的 profile |
 | 组播加入 | 有（socket2） | 有（`JoinSdMulticast` + `IP_MULTICAST_IF`） | 本项目已在真实网卡 `ens192` 上验证收发 |
 | 互操作实测（vsomeip） | 有（Docker 容器） | 有（3.4.10，netns + veth，双向） | 本项目不走容器，见验证通道文档 |
 | 金丝雀/无分配见证 | 有 | 有 | 本项目用全局 `operator new` 计数 |
@@ -49,7 +49,7 @@ SOME/IP-TP 重组、E2E Profile 1、真实网卡组播与 vsomeip 双向互操�
 
 | 项 | Rust | 本项目 |
 |---|---|---|
-| 单元/集成测试 | 540 个 `#[test]` + 285 个 `#[tokio::test]` | 142 个用例、36966 条断言（含 SD 变异、TP 分段与 E2E 随机扫描） |
+| 单元/集成测试 | 540 个 `#[test]` + 285 个 `#[tokio::test]` | 148 个用例、44989 条断言（含 SD 变异、TP 分段与四套 E2E 随机扫描） |
 | 线格式 golden | 19 条手写字面量 | 19 条同源字面量（逐字节移植） |
 | 无分配 | `no_alloc_witness` 测试 | `someip_no_alloc` 进程，覆盖 server + client |
 | 真实网络 | tokio + vsomeip 容器互操作 | 真实 UDP 用例 + 双进程 demo + Python 探针 + vsomeip 双向互操作 |

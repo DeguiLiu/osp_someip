@@ -10,6 +10,7 @@
 
 #include "osp/someip/e2e_profile1.hpp"
 #include "osp/someip/e2e_profile4.hpp"
+#include "osp/someip/e2e_profile5.hpp"
 #include "osp/someip/e2e_profile7.hpp"
 
 #include <array>
@@ -80,4 +81,10 @@ TEST_CASE("e2e fuzz - profile 7 never escapes its buffer", "[fuzz][e2e]") {
   osp::someip::E2EProfile7<0x1234U, 15U> sender;
   osp::someip::E2EProfile7<0x1234U, 15U> receiver;
   Sweep(sender, receiver, 20U);
+}
+
+TEST_CASE("e2e fuzz - profile 5 never escapes its buffer", "[fuzz][e2e]") {
+  osp::someip::E2EProfile5<0x1234U, 15U> sender;
+  osp::someip::E2EProfile5<0x1234U, 15U> receiver;
+  Sweep(sender, receiver, 3U);
 }

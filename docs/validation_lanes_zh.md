@@ -21,7 +21,7 @@ setarch $(uname -m) -R env ASAN_OPTIONS=detect_leaks=1 ./build-asan/tests/someip
 ./build/tests/someip_no_alloc          # exit 0 表示零分配
 ```
 
-验收：142 个用例 / 36966 条断言全过；sanitizer 无报告；零分配进程返回 0；
+验收：148 个用例 / 44989 条断言全过；sanitizer 无报告；零分配进程返回 0；
 `someip_headers_self_contained` 把 26 个公开头文件逐个单独编译，全部通过。
 
 E2E Profile 4 的 CRC 另外做过一次交叉核对：用临时程序把 vsomeip 的 `crc.cpp` 与
@@ -54,10 +54,10 @@ OSP_GITHUB_MIRROR=https://ghfast.top/ cmake -S . -B /tmp/fetch-check \
 cmake --build /tmp/fetch-check -j8 && ctest --test-dir /tmp/fetch-check
 ```
 
-结果 146 项全过。这条路径验证的是 `FetchContent` 拉下来的 newosp main 与本地同级目录等价。
+结果 152 项全过。这条路径验证的是 `FetchContent` 拉下来的 newosp main 与本地同级目录等价。
 
 发布状态复核：从 Gitee 重新 `git clone --depth 1` 到空目录，`cmake --preset host-debug
--DSOMEIP_FETCH_NEWOSP=ON` 后构建，146 项全过（142 个用例、36966 条断言）。仓库自包含，不依赖任何未提交文件。
+-DSOMEIP_FETCH_NEWOSP=ON` 后构建，152 项全过（148 个用例、44989 条断言）。仓库自包含，不依赖任何未提交文件。
 
 跨实现互通（已验证，双向）：
 
@@ -225,10 +225,10 @@ tools/arm_vm.sh Image busybox.static \
 
 ```
 KERNEL: Linux 6.6.134-0-virt aarch64
-test cases: 142 | 141 passed | 1 skipped        (组播用例需要真机网卡)
-assertions: 36942 | 36942 passed
+test cases: 148 | 147 passed | 1 skipped        (组播用例需要真机网卡)
+assertions: 44965 | 44965 passed
 TESTS_RC=0
-round_trips=3000 avg=94.9us p50=89us p99=228us rate=10103 req/s
+round_trips=3000 avg=91.3us p50=87us p99=186us rate=10482 req/s
 BENCH_RC=0
 ```
 
@@ -245,7 +245,7 @@ BENCH_RC=0
 DEMO_RC=0
 ```
 
-结果：141 个用例通过，1 个跳过（组播），`someip_loopback_bench` 为
+结果：146 个用例通过，1 个跳过（组播），`someip_loopback_bench` 为
 p50 11 µs、p99 24 µs、约 6.6 万次请求/秒。这是 qemu 用户态模拟，不是板上数据。
 
 两个示例程序也在 qemu 下跑通了完整链路（等同板上冒烟的命令）：
