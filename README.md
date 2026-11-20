@@ -60,18 +60,20 @@ cmake --build build-noexc -j8
 ctest --test-dir build-noexc --output-on-failure
 ```
 
-可运行的服务端与客户端示例（服务端绑定 30490、加入组播并每秒发布；客户端发现、订阅、收事件）：
+可运行的服务端与客户端示例（服务端绑定 SD 30490 与服务 30509、加入组播、回显请求并每秒发布；
+客户端发现、订阅、发一次 RPC、收事件）：
 
 ```bash
 cmake -S . -B build-demo -DSOMEIP_BUILD_EXAMPLES=ON
 cmake --build build-demo -j8
 ./build-demo/examples/someip_server_demo --iface 127.0.0.1 --service 1234 --seconds 6 &
 ./build-demo/examples/someip_client_demo --server 127.0.0.1 --local 127.0.0.1 \
-    --port 30510 --service 1234 --seconds 4
+    --port 30510 --service 1234 --method 0001 --seconds 4
 ```
 
-实测输出：客户端发现 `0x1234/0x0001`、订阅 Ack（TTL=10）、每秒收到一条 4 字节事件；
-服务端显示 `1 subscriber(s)`。
+实测输出：客户端发现 `0x1234/0x0001`、订阅 Ack（TTL=10）、收到 RPC 响应
+`0x00010001`（4 字节回显）、每秒收到一条 4 字节事件；服务端显示请求日志与
+`1 subscriber(s)`。
 
 newosp 头文件默认取 `../newosp/include`，可用 `-DOSP_INCLUDE_DIR=<path>` 覆盖。
 

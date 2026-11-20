@@ -29,6 +29,7 @@ struct Options final {
   std::array<std::uint8_t, 4U> local{127U, 0U, 0U, 1U};
   std::uint16_t local_port{30510U};
   std::uint16_t service_id{0x1234U};
+  std::uint16_t method_id{0U};
   std::uint32_t seconds{10U};
 };
 
@@ -99,11 +100,14 @@ bool ParseOptions(int argc, char** argv, Options& options) noexcept {
       options.local_port = static_cast<std::uint16_t>(std::strtoul(argv[++index], nullptr, 10));
     } else if (0 == std::strcmp(argv[index], "--service") && (index + 1) < argc) {
       options.service_id = static_cast<std::uint16_t>(std::strtoul(argv[++index], nullptr, 16));
+    } else if (0 == std::strcmp(argv[index], "--method") && (index + 1) < argc) {
+      options.method_id = static_cast<std::uint16_t>(std::strtoul(argv[++index], nullptr, 16));
     } else if (0 == std::strcmp(argv[index], "--seconds") && (index + 1) < argc) {
       options.seconds = static_cast<std::uint32_t>(std::strtoul(argv[++index], nullptr, 10));
     } else {
       std::printf(
-          "usage: %s --server IP [--local IP] [--port N] [--service HEX] [--seconds N]\n",
+          "usage: %s --server IP [--local IP] [--port N] [--service HEX] [--method HEX]"
+          " [--seconds N]\n",
           argv[0]);
       return false;
     }
@@ -152,6 +156,7 @@ int main(int argc, char** argv) {
 
   const auto start = std::chrono::steady_clock::now();
   bool subscribed = false;
+  bool request_sent = false;
   for (;;) {
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                              std::chrono::steady_clock::now() - start)
@@ -171,10 +176,16 @@ int main(int argc, char** argv) {
     }
     client.Tick(now_ms);
 
-    if (!subscribed) {
-      const auto* remote = client.FindCachedByService(options.service_id);
-      if (nullptr != remote && client.Subscribe(remote->service, 0x0001U, 10U, now_ms)) {
-        subscribed = true;
+    const auto* remote = client.FindCachedByService(options.service_id);
+    if (!subscribed && nullptr != remote &&
+        client.Subscribe(remote->service, 0x0001U, 10U, now_ms)) {
+      subscribed = true;
+    }
+    if (!request_sent && 0U != options.method_id && nullptr != remote) {
+      const std::uint8_t payload[4] = {0x01U, 0x02U, 0x03U, 0x04U};
+      if (client.Request(remote->service, options.method_id, osp::make_span(payload), 2000U,
+                         now_ms)) {
+        request_sent = true;
       }
     }
 

@@ -1,7 +1,8 @@
 /**
  * @file server_demo.cpp
- * @brief Runnable SD service provider: binds 30490, joins the SD group, offers a
- *        service and publishes a counter event every second.
+ * @brief Runnable SD service provider: binds SD 30490 and service 30509, joins
+ *        the SD group, offers a service, echoes requests and publishes a counter
+ *        event every second.
  *
  * Usage:
  *   someip_server_demo [--iface 192.168.1.10] [--service 1234] [--seconds 30]
@@ -22,6 +23,23 @@
 #include <thread>
 
 namespace {
+
+/// Echo every request payload back to the caller.
+struct EchoHandler final {
+  osp::someip::RequestReply OnRequest(
+      const osp::someip::IncomingRequest& request) noexcept {
+    OSP_LOG_INFO("someip", "request 0x%04X from %u.%u.%u.%u",
+                 static_cast<unsigned>(request.method_id),
+                 static_cast<unsigned>(request.from.address[0]),
+                 static_cast<unsigned>(request.from.address[1]),
+                 static_cast<unsigned>(request.from.address[2]),
+                 static_cast<unsigned>(request.from.address[3]));
+    osp::someip::RequestReply reply;
+    reply.handled = true;
+    reply.payload = request.payload;
+    return reply;
+  }
+};
 
 struct Options final {
   std::array<std::uint8_t, 4U> interface_address{};
@@ -57,6 +75,39 @@ bool ParseOptions(int argc, char** argv, Options& options) noexcept {
   return true;
 }
 
+constexpr std::uint16_t kServicePort = 30509U;
+
+bool CreateBound(std::uint16_t port, osp::UdpSocket& socket) noexcept {
+  auto created = osp::UdpSocket::Create();
+  if (!created.has_value()) {
+    return false;
+  }
+  socket = std::move(created.value());
+  (void)socket.SetReuseAddress(true);
+  const auto address = osp::SocketAddress::FromIpv4("0.0.0.0", port);
+  if (!address.has_value() || !socket.Bind(address.value()).has_value()) {
+    return false;
+  }
+  return 0 == osp::SetFdNonBlocking(socket.Fd(), true);
+}
+
+/// Routes SD traffic (port 30490) to the SD socket and everything else to the
+/// service socket, mirroring how a real node separates the two.
+struct DemoSink final {
+  osp::UdpSocket* sd_socket{nullptr};
+  osp::UdpSocket* service_socket{nullptr};
+
+  void operator()(osp::span<const std::uint8_t> datagram,
+                  const osp::someip::Ipv4Endpoint& to) const noexcept {
+    osp::UdpSocket* socket =
+        (osp::someip::kSdPort == to.port) ? sd_socket : service_socket;
+    const auto address = osp::SocketAddress::FromIpv4Bytes(to.address, to.port);
+    if (address.has_value()) {
+      (void)socket->SendTo(datagram.data(), datagram.size(), address.value());
+    }
+  }
+};
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -65,38 +116,31 @@ int main(int argc, char** argv) {
     return 2;
   }
 
-  auto created = osp::UdpSocket::Create();
-  if (!created.has_value()) {
-    std::printf("failed to create UDP socket\n");
+  osp::UdpSocket sd_socket;
+  osp::UdpSocket service_socket;
+  if (!CreateBound(osp::someip::kSdPort, sd_socket) ||
+      !CreateBound(kServicePort, service_socket)) {
+    std::printf("failed to bind UDP %u/%u\n",
+                static_cast<unsigned>(osp::someip::kSdPort),
+                static_cast<unsigned>(kServicePort));
     return 1;
   }
-  osp::UdpSocket socket = std::move(created.value());
-  (void)socket.SetReuseAddress(true);
-
-  const auto bind_address = osp::SocketAddress::FromIpv4("0.0.0.0", osp::someip::kSdPort);
-  if (!bind_address.has_value() || !socket.Bind(bind_address.value()).has_value()) {
-    std::printf("failed to bind UDP %u\n", static_cast<unsigned>(osp::someip::kSdPort));
-    return 1;
-  }
-  if (!osp::someip::JoinSdMulticast(socket, options.interface_address)) {
+  if (!osp::someip::JoinSdMulticast(sd_socket, options.interface_address)) {
     OSP_LOG_WARN("someip", "multicast join failed; only unicast SD will be received");
   }
-  if (0 != osp::SetFdNonBlocking(socket.Fd(), true)) {
-    std::printf("failed to switch the socket to non-blocking\n");
-    return 1;
-  }
 
-  osp::someip::UdpSender sink(socket);
-  osp::someip::Server<osp::someip::UdpSender, 4U, 16U> server(sink);
+  DemoSink sink{&sd_socket, &service_socket};
+  osp::someip::Server<DemoSink, 4U, 16U, 1400U, EchoHandler> server(sink);
   const osp::someip::ServiceInstance service =
       osp::someip::ServiceInstance::New(options.service_id, 0x0001U, 1U);
-  const osp::someip::Ipv4Endpoint endpoint{options.interface_address, 30509U};
+  const osp::someip::Ipv4Endpoint endpoint{options.interface_address, kServicePort};
   if (!server.Offer(service, endpoint, 30U, 0U)) {
     std::printf("failed to offer service 0x%04X\n", static_cast<unsigned>(options.service_id));
     return 1;
   }
   OSP_LOG_INFO("someip", "offering 0x%04X on port %u, SD on %u",
-               static_cast<unsigned>(options.service_id), 30509U,
+               static_cast<unsigned>(options.service_id),
+               static_cast<unsigned>(kServicePort),
                static_cast<unsigned>(osp::someip::kSdPort));
 
   const auto start = std::chrono::steady_clock::now();
@@ -110,14 +154,17 @@ int main(int argc, char** argv) {
 
     std::uint8_t buffer[1500] = {};
     osp::SocketAddress from;
-    for (;;) {
-      const auto received = socket.RecvFrom(buffer, sizeof(buffer), from);
-      if (!received.has_value()) {
-        break;
+    for (std::uint32_t pass = 0U; pass < 2U; ++pass) {
+      osp::UdpSocket& socket = (0U == pass) ? sd_socket : service_socket;
+      for (;;) {
+        const auto received = socket.RecvFrom(buffer, sizeof(buffer), from);
+        if (!received.has_value()) {
+          break;
+        }
+        server.HandleDatagram(
+            osp::span<const std::uint8_t>(buffer, static_cast<std::size_t>(received.value())),
+            osp::someip::EndpointOf(from), now_ms);
       }
-      server.HandleDatagram(
-          osp::span<const std::uint8_t>(buffer, static_cast<std::size_t>(received.value())),
-          osp::someip::EndpointOf(from), now_ms);
     }
     server.Tick(now_ms);
 
