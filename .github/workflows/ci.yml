@@ -58,3 +58,18 @@ jobs:
         run: pip install cpplint
       - name: Run cpplint
         run: cpplint --recursive include/osp/someip tests examples
+
+  portability:
+    name: rt-thread and lwip type checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch newosp and lwIP headers
+        run: |
+          git clone --depth 1 https://github.com/DeguiLiu/newosp.git /tmp/newosp
+          git clone --depth 1 --branch STABLE-2_2_0_RELEASE \
+              https://github.com/lwip-tcpip/lwip.git /tmp/lwip
+      - name: RT-Thread branch
+        run: tools/check_rtthread.sh g++ /tmp/newosp/include
+      - name: lwIP socket backend
+        run: tools/check_lwip.sh g++ /tmp/lwip /tmp/newosp/include

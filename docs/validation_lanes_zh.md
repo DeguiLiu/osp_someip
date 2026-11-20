@@ -188,11 +188,26 @@ tools/check_rtthread.sh g++ ../newosp/include
 ```
 
 结果：24 个头文件在 `-fno-exceptions -fno-rtti` 下全部通过。这项检查能发现核心代码
-误用 POSIX 头（`<thread>`、`<chrono>`、`<sys/socket.h>`），但**不能**证明：
+误用 POSIX 头（`<thread>`、`<chrono>`、`<sys/socket.h>`）。
 
-- `osp/socket.hpp` 的 lwIP 后端能在 `OSP_NET_BACKEND=1` 下编译（本机没有 lwIP 头文件）；
-- 收发、定时、中断上下文下的行为；
-- 栈与中断占用。
+lwIP 后端另外单独验证：下载 lwIP 2.2.0，用 `tools/lwip_port` 里的最小 `lwipopts.h` 与
+`arch/cc.h` 做类型检查：
+
+```bash
+git clone --depth 1 --branch STABLE-2_2_0_RELEASE \
+    https://ghfast.top/https://github.com/lwip-tcpip/lwip.git lwip
+tools/check_lwip.sh g++ "$PWD/lwip" ../newosp/include
+# 或：cmake -S . -B build/host-debug -DSOMEIP_LWIP_DIR="$PWD/lwip"
+#     ctest --test-dir build/host-debug -R someip_lwip_socket_backend
+```
+
+结果：`osp/socket.hpp` 与 `udp_link.hpp` 在 `-DOSP_NET_BACKEND=1`、`-Wall -Wextra` 下零告警
+编译通过。
+
+仍**不能**证明：
+
+- 收发、定时、中断上下文下的运行行为；
+- 栈与中断占用，以及 lwIP 与 RT-Thread 的具体版本组合。
 
 这些都需要 RT-Thread SDK 与板子，和板级实测一并列为待办。
 
@@ -208,4 +223,5 @@ tools/check_rtthread.sh g++ ../newosp/include
 | vsomeip 互操作（netns + veth） | 完成 | 双向通过，见第 3 节 |
 | vsomeip 容器方式 | 未执行 | 用户不在 docker 组，已被 netns 方式替代 |
 | ARM 板卡冒烟 | 待执行 | 没有目标板 |
-| RT-Thread 核心头文件编译 | 完成（桩 SDK） | 24 个核心头文件通过；socket 与运行时未验证 |
+| RT-Thread 核心头文件编译 | 完成（桩 SDK） | 24 个核心头文件通过 |
+| lwIP socket 后端类型检查 | 完成（lwIP 2.2.0 头文件） | `socket.hpp` + `udp_link.hpp` 零告警；运行时未验证 |

@@ -162,7 +162,8 @@ docs/              设计、验证、基准、静态分析文档
   服务端侧收到订阅、事件与 RPC 应答，客户端侧完成发现、订阅、RPC 与事件。
   复现见 `tools/vsomeip_interop.sh` 与 `docs/validation_lanes_zh.md`。
 - RT-Thread：核心 24 个头文件用桩 `rtthread.h`、`-DOSP_PLATFORM_RTTHREAD=1` 编译通过；
-  socket 接入与运行时尚无实机验证。
+  lwIP 后端（`OSP_NET_BACKEND=1`）对 lwIP 2.2.0 头文件零告警通过类型检查；
+  实机收发与运行时仍未验证。
 - SOME/IP-TP 按 16 字节单元记录到达情况，乱序可重组，重叠分段丢弃；E2E 只带 Profile 1，
   没有 Profile 2/4/5/7。
 - 参考实现只用于核对行为，不复制其代码。

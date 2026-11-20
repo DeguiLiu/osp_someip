@@ -36,6 +36,12 @@ if(NOT CMAKE_CROSSCOMPILING)
     add_test(NAME someip_rtthread_core_headers
         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_rtthread.sh
                 ${CMAKE_CXX_COMPILER} ${OSP_INCLUDE_DIR})
+    # Needs an lwIP checkout, which is not vendored: pass -DSOMEIP_LWIP_DIR=<dir>.
+    if(SOMEIP_LWIP_DIR)
+        add_test(NAME someip_lwip_socket_backend
+            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_lwip.sh
+                    ${CMAKE_CXX_COMPILER} ${SOMEIP_LWIP_DIR} ${OSP_INCLUDE_DIR})
+    endif()
 endif()
 
 add_executable(someip_tests
