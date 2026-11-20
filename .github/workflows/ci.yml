@@ -46,6 +46,8 @@ jobs:
         run: cmake --build --preset demo -j
       - name: Loopback benchmark
         run: ./build/demo/examples/someip_loopback_bench
+      - name: TP and E2E pipeline
+        run: ./build/demo/examples/someip_fragmented_demo
 
   lint:
     name: cpplint

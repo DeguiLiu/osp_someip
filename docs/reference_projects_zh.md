@@ -16,7 +16,7 @@
 | 项目 | 形态 | 许可证 | 我们怎么用 | 边界 |
 |---|---|---|---|---|
 | open-someip-spec | 规范文本 | 以仓库为准 | 语义与线格式的第一依据 | 只作规范，不作代码来源 |
-| COVESA/vsomeip | C++ 实现 | MPL-2.0 | L2 互操作黑盒对端（Docker，`--network host`） | 不复制源码；MPL 是文件级 copyleft |
+| COVESA/vsomeip | C++ 实现 | MPL-2.0 | L2 互操作黑盒对端（3.4.10，用户命名空间 + veth，见 `tools/vsomeip_interop.sh`） | 不复制源码；MPL 是文件级 copyleft |
 | COVESA/commonapi-someip | C++ 绑定层 | MPL-2.0（以仓库为准） | 参考服务接口到载荷的映射方式 | 不复制源码 |
 | someipy | Python 实现 | 以仓库 LICENSE 为准 | 用脚本编排 L2 场景、快速造异常报文 | 不进入产品，不作 oracle |
 | Wireshark SOME/IP dissector | 解析器 | GPL-2.0（以仓库为准） | `tshark` 抓包比对字段解释 | GPL 代码一律不复制 |
