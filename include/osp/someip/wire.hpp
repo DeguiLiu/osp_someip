@@ -134,7 +134,9 @@ class WireEncoder {
     return static_cast<const Derived*>(this)->DoEncodeTo(out);
   }
 
- protected:
+ private:
+  friend Derived;
+
   WireEncoder() = default;
   WireEncoder(const WireEncoder&) = default;
   WireEncoder(WireEncoder&&) = default;

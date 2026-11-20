@@ -23,7 +23,7 @@ class MessageView;
 struct DecodedMessage;
 
 /// @brief Reason codes carried by ErrorCode::kInvalidMessage.
-enum class SdRejectReason : std::uint16_t {
+enum class SdRejectReason : std::uint8_t {
   kPayloadTooShort = 1U,
   kInterfaceVersion = 2U,
   kMessageType = 3U,

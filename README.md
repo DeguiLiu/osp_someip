@@ -22,6 +22,7 @@
 | E2E 钩子 | `E2E` 策略模板：发送前 Protect、接收时 Check，失败丢弃；默认 `NoE2E` 零开销 |
 | 零堆 | 全局 `operator new` 计数见证进程，完整场景 0 次分配 |
 | Sanitizer | ASan + UBSan 全量通过 |
+| 静态分析 | cpplint 0 条；clang-tidy bugprone/performance 仅剩已记录偏差 |
 | 性能基线 | 回环 3000 RTT：p50 5 µs、p99 9–12 µs、约 16 万 req/s（x86 Release） |
 | 测试 | 101 个用例、3699 条断言（含确定式变异扫描）；普通构建与无异常构建均通过 |
 
@@ -106,7 +107,8 @@ newosp 头文件默认取 `../newosp/include`，可用 `-DOSP_INCLUDE_DIR=<path>
 [docs/reference_projects_zh.md](docs/reference_projects_zh.md)，与 Rust 原型的对照见
 [docs/comparison_with_rust_zh.md](docs/comparison_with_rust_zh.md)，验证通道与环境前置见
 [docs/validation_lanes_zh.md](docs/validation_lanes_zh.md)，性能基线见
-[docs/benchmark_report_zh.md](docs/benchmark_report_zh.md)。
+[docs/benchmark_report_zh.md](docs/benchmark_report_zh.md)，静态分析结论见
+[docs/static_analysis_zh.md](docs/static_analysis_zh.md)。
 
 环境自检：`./tools/verify_env.sh`。
 

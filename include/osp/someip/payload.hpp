@@ -33,7 +33,9 @@ class PayloadCodec {
     return static_cast<const Derived*>(this)->DoEncodeTo(out);
   }
 
- protected:
+ private:
+  friend Derived;
+
   PayloadCodec() = default;
   PayloadCodec(const PayloadCodec&) = default;
   PayloadCodec(PayloadCodec&&) = default;

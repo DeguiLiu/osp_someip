@@ -196,9 +196,8 @@ class Entry final : public osp::someip::WireEncoder<Entry> {
       case Kind::kStopOfferService:
       case Kind::kSubscribeNack:
         return 0U;
-      case Kind::kSubscribeAck:
-        return event_group_.ttl;
       case Kind::kSubscribe:
+      case Kind::kSubscribeAck:
         return event_group_.ttl;
       case Kind::kFindService:
       case Kind::kOfferService:
