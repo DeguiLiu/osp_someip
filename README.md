@@ -171,7 +171,8 @@ docs/              设计、验证、基准、静态分析文档
   lwIP 后端（`OSP_NET_BACKEND=1`）对 lwIP 2.2.0 头文件零告警通过类型检查；
   实机收发与运行时仍未验证。
 - SOME/IP-TP 按 16 字节单元记录到达情况，乱序可重组，重叠分段丢弃；E2E 只带 Profile 1，
-  没有 Profile 2。
+  没有 Profile 2：它的校验是按周期推进的状态机（INITIAL/SYNC/REPEATED/WRONGSEQUENCE），
+  当前“一条报文进、一个 ok/error 出”的钩子表达不了，需要先改接口。
 - 参考实现只用于核对行为，不复制其代码。
 
 ## 文档

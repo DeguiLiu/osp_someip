@@ -178,7 +178,9 @@ docs/               design, validation, benchmark and static-analysis notes
   `rtthread.h`, and the lwIP backend (`OSP_NET_BACKEND=1`) type-checks against lwIP 2.2.0
   headers with no warnings; runtime behaviour on a board is still unverified.
 - SOME/IP-TP tracks 16-byte units, so segments may arrive in any order; overlapping segments are
-  dropped. E2E ships Profiles 1, 4, 5 and 7, not 2.
+  dropped. E2E ships Profiles 1, 4, 5 and 7. Profile 2 is not implemented: its check is a cyclic state
+machine (INITIAL/SYNC/REPEATED/WRONGSEQUENCE), which the per-message ok/error hook cannot
+express without changing the interface first.
 
 ## Documentation
 

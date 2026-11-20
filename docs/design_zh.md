@@ -182,6 +182,13 @@ CRC-32/AUTOSAR（poly 0xF4ACFB13，反射形式 0xC8DF352F，init 与终值异�
 
 它们都用 `memmove` 在缓冲区头部插入保护头，因此调用方必须预留对应空间。
 
+Profile 2 没有实现，原因不是缺 CRC，而是校验模型不同。AUTOSAR 的 `E2E_P02Check` 是一个
+按周期推进的状态机：维护 `LastValidCounter`、`SyncCounter`、`NoNewOrRepeatedDataCounter`，
+并区分 INITIAL / OK / OKSOMELOST / REPEATED / SYNC / WRONGSEQUENCE 六种结果；应用还要在每个
+周期告诉它“本轮有没有新数据”。本库的钩子是“一条报文进、一个 ok/error 出”，既表达不了这些
+状态，也没有周期概念。要支持 Profile 2，需要先把 `E2ECheck` 扩展成带状态枚举与周期推进的接口，
+再让 `Server` / `Client` 按状态决定投递还是丢弃——这是接口级改动，不应在只补 profile 时顺手做。
+
 ### 3.13 SOME/IP-TP 重组
 
 `TpHeader` 解析四字节分段头：28 位偏移以 16 字节为单位，低 1 位为 more 标志，保留位非零即拒绝。
