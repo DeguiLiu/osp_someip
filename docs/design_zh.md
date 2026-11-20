@@ -8,10 +8,10 @@
 
 | 范围内 | 范围外 |
 |---|---|
-| SOME/IP 头、消息、SD entry/option 编解码 | E2E Profile 2/5/7 |
+| SOME/IP 头、消息、SD entry/option 编解码 | E2E Profile 2/5 |
 | SOME/IP-TP 分段头与定容重组（含乱序） | SOME/IP-TP 重叠分段容忍 |
 | 服务端 offer/stop-offer、事件发布、订阅管理 | mTLS 与安全传输 |
-| E2E 钩子与 Profile 1/4 | 动态分配、vtable 多态、工厂模式 |
+| E2E 钩子与 Profile 1/4/7 | 动态分配、vtable 多态、工厂模式 |
 | 客户端发现缓存、订阅、请求-响应匹配 | TLS/mTLS 与安全传输 |
 | 定容、零分配、无异常的错误模型 | 动态分配、vtable 多态、工厂模式 |
 
@@ -170,6 +170,12 @@ CRC-32/AUTOSAR（poly 0xF4ACFB13，反射形式 0xC8DF352F，init 与终值异�
 标准校验值 0x1697D06A 已写进测试。计数器按窗口判定：重复值（差 0）与超过 `MaxDeltaCounter`
 的跳变都丢弃。
 
+`E2EProfile7<DataId, MaxDeltaCounter>`：载荷前 20 字节依次是 CRC-64、总长度、32 位计数器和
+32 位数据 ID；CRC 覆盖 CRC 之后的全部字节，算法为 CRC-64/XZ（poly 0x42F0E1EBA9EA3693，
+反射形式 0xC96C5795D7870F42，init 与终值异或均为 0xFFFFFFFFFFFFFFFF），标准校验值
+0x995DC9BBDF1939FA 已写进测试。重复计数按“同一消息重发”接受，只有超过 `MaxDeltaCounter`
+的跳变被丢弃，与参考实现一致。
+
 两者都用 `memmove` 在缓冲区头部插入保护头，因此调用方必须预留对应空间。
 
 ### 3.13 SOME/IP-TP 重组
@@ -191,9 +197,9 @@ CRC-32/AUTOSAR（poly 0xF4ACFB13，反射形式 0xC8DF352F，init 与终值异�
 | L2 互操作 | 与 vsomeip 容器对端做 RPC、通知、订阅 | 双向收发一致 |
 | L3 目标 | ARM Linux / RT-Thread 构建与静态内存报告 | 无堆、尺寸达标 |
 
-当前 L0/L1 结果：132 个用例、12912 条断言（含 SD 变异扫描与 4000 轮 TP 分段扫描），外加零分配见证进程；
+当前 L0/L1 结果：137 个用例、12938 条断言（含 SD 变异扫描与 4000 轮 TP 分段扫描），外加零分配见证进程；
 普通构建、`-fno-exceptions -fno-rtti` 构建与 ASan+UBSan 构建均通过。L2 的组播在真实网卡
-（`ens192`）上验证；L3 完成 aarch64 交叉构建与 qemu 运行，131 过、1 跳过。
+（`ens192`）上验证；L3 完成 aarch64 交叉构建与 qemu 运行，136 过、1 跳过。
 
 ## 5. 里程碑与风险
 
