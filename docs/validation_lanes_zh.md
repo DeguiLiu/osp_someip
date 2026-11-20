@@ -38,6 +38,14 @@ python3 tools/sd_probe.py --mode server --service 1234 --seconds 6 &
 
 ## 2. vsomeip 互操作通道（当前阻塞）
 
+当前诊断（2026-11-20）：`dockerd` 正在运行、`docker.service` 为 active，但
+`/var/run/docker.sock` 权限是 `root:docker 0660`，当前用户不在 `docker` 组，且无免密 sudo。
+解除方式：
+
+```bash
+sudo usermod -aG docker "$USER"   # 之后重新登录
+```
+
 前置：
 
 ```bash
@@ -69,6 +77,10 @@ docker run --rm --network=host -i someip-peer
 ## 3. ARM 目标通道（当前阻塞）
 
 前置：`arm-linux-gnueabihf-g++` 或 `aarch64-linux-gnu-g++`，以及可运行的目标板。
+
+当前诊断：本机只有 `arm-none-eabi-g++`（裸机 newlib）。用它对 `server.hpp` 做
+`-fsyntax-only` 会停在 newosp `platform.hpp` 的 `std::this_thread`，说明需要带线程/系统调用的
+Linux ARM sysroot 或 RT-Thread 专用工具链；`qemu-aarch64` 虽在，但没有对应的 aarch64 编译器。
 
 `cmake/toolchains/arm-linux-gnueabihf.cmake` 示例：
 
@@ -104,5 +116,5 @@ arm-linux-gnueabihf-size build-arm/examples/someip_server_demo
 | 主机单测 / 无异常 / sanitizer / 零分配 | 完成 | — |
 | 双进程 C++ demo | 完成 | — |
 | Python 探针双向互通 | 完成 | — |
-| vsomeip 容器互操作 | 待执行 | Docker 守护进程不可达 |
-| ARM 交叉构建与板上冒烟 | 待执行 | 无交叉工具链与目标板 |
+| vsomeip 容器互操作 | 待执行 | 用户不在 docker 组（socket `root:docker 0660`） |
+| ARM 交叉构建与板上冒烟 | 待执行 | 仅 `arm-none-eabi`，无 Linux ARM sysroot 或 RT-Thread SDK |

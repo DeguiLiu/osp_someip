@@ -36,8 +36,8 @@ option(SOMEIP_NO_EXCEPTIONS "Build tests with -fno-exceptions -fno-rtti" OFF)
 add_library(osp_someip INTERFACE)
 target_include_directories(osp_someip INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
-    ${OSP_INCLUDE_DIR})
+    $<BUILD_INTERFACE:${OSP_INCLUDE_DIR}>
+    $<INSTALL_INTERFACE:include>)
 target_compile_features(osp_someip INTERFACE cxx_std_17)
 target_compile_options(osp_someip INTERFACE
     -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
@@ -55,3 +55,27 @@ endif()
 if(SOMEIP_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
+
+# --- Install / package config ---
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+install(TARGETS osp_someip EXPORT osp_someipTargets)
+install(DIRECTORY include/osp DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(EXPORT osp_someipTargets
+    FILE osp_someipTargets.cmake
+    NAMESPACE osp::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/osp_someip)
+
+configure_package_config_file(
+    cmake/osp_someipConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/osp_someipConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/osp_someip)
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/osp_someipConfigVersion.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion)
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/osp_someipConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/osp_someipConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/osp_someip)

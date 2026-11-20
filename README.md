@@ -101,6 +101,24 @@ ctest --preset host-debug
 
 CI 模板见 `.github/workflows/ci.yml`（主机三档 + sanitizer + 示例/基准 + cpplint）。
 
+安装与消费：
+
+```bash
+cmake -S . -B build -DSOMEIP_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/opt/osp-someip
+cmake --build build -j8 && cmake --install build
+```
+
+消费端：
+
+```cmake
+find_package(osp_someip CONFIG REQUIRED)
+target_link_libraries(app PRIVATE osp::osp_someip)
+```
+
+newosp 头文件不随本包安装：消费端自行把它加入 include 路径，或在 `find_package` 前
+设置 `OSP_INCLUDE_DIR`。已验证：安装到 `/tmp` 前缀后，独立工程 `find_package` →
+链接 → 运行（生成 56 字节 offer 报文）。
+
 ## 设计要点
 
 1. 编码器是 CRTP 骨架：派生类实现 `DoEncodedSize()` 与 `DoEncodeTo(osp::span<uint8_t>)`，

@@ -49,8 +49,16 @@ echo "vsomeip interop lane"
 check_optional "docker CLI" docker --version
 if docker info >/dev/null 2>&1; then
     printf '%-42s %s\n' "docker daemon" "OK"
+elif [ -S /var/run/docker.sock ]; then
+    if id -nG 2>/dev/null | grep -qw docker; then
+        printf '%-42s %s\n' "docker daemon" "socket present, access denied (check daemon logs)"
+    else
+        printf '%-42s %s\n' "docker daemon" \
+            "socket root:docker, user not in docker group"
+        printf '%-42s %s\n' "  fix" "sudo usermod -aG docker \$USER, then re-login"
+    fi
 else
-    printf '%-42s %s\n' "docker daemon" "unreachable (start dockerd or join docker group)"
+    printf '%-42s %s\n' "docker daemon" "no socket (start dockerd)"
 fi
 if [ -d "${VSOMEIP_PEER_DIR:-}" ]; then
     printf '%-42s %s\n' "VSOMEIP_PEER_DIR" "${VSOMEIP_PEER_DIR}"
