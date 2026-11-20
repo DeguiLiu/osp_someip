@@ -1,2 +1,5 @@
 add_executable(someip_server_demo server_demo.cpp)
 target_link_libraries(someip_server_demo PRIVATE osp_someip)
+
+add_executable(someip_client_demo client_demo.cpp)
+target_link_libraries(someip_client_demo PRIVATE osp_someip)
