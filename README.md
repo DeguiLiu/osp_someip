@@ -44,7 +44,7 @@ cmake --build --preset host-debug -j8
 ctest --preset host-debug
 ```
 
-主机上 117 个用例、3838 条断言通过；`noexc` 与 ASan + UBSan 两组构建另行跑通。
+主机上 118 个用例、3846 条断言通过；`noexc` 与 ASan + UBSan 两组构建另行跑通。
 aarch64 交叉构建后在 qemu 下 113 过、1 跳过（组播用例需要真机网卡）。
 x86 回环 3000 次 RPC 往返，p50 5 µs、p99 9–12 µs，约 16 万次请求/秒；
 aarch64（qemu）同一基准 p50 11 µs、p99 24 µs，约 6.6 万次请求/秒。

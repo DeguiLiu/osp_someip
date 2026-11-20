@@ -3,6 +3,7 @@
  * @brief SOME/IP-TP header, reassembly, and server integration.
  */
 
+#include "osp/someip/client.hpp"
 #include "osp/someip/message.hpp"
 #include "osp/someip/message_id.hpp"
 #include "osp/someip/server.hpp"
@@ -32,10 +33,11 @@ constexpr std::uint16_t kMethodId = 0x0001U;
 
 std::uint32_t BuildSegment(std::uint8_t* out, std::uint32_t request_id,
                            std::uint32_t offset, bool more,
-                           osp::span<const std::uint8_t> data) {
+                           osp::span<const std::uint8_t> data,
+                           MessageType type = MessageType::kRequest) {
   const MessageId id = MessageId::FromServiceAndMethod(kServiceId, kMethodId);
   const Header header = Header::New(
-      id, request_id, 0x01U, 0x01U, MessageTypeField::New(MessageType::kRequest, true),
+      id, request_id, 0x01U, 0x01U, MessageTypeField::New(type, true),
       ReturnCode::Ok(), static_cast<std::uint32_t>(TpHeader::kSize + data.size()));
   const auto written = header.EncodeTo(osp::make_span(out, osp::someip::kHeaderSize));
   REQUIRE(written.has_value());
@@ -229,4 +231,52 @@ TEST_CASE("tp - server answers a reassembled request", "[tp][server]") {
   REQUIRE(MessageType::kResponse == response.value().Head().Type().Type());
   REQUIRE(payload.size() == response.value().Body().size());
   REQUIRE(0 == std::memcmp(response.value().Body().data(), payload.data(), payload.size()));
+}
+
+namespace {
+
+struct EventHandler final {
+  std::uint32_t events{0U};
+  std::uint32_t size{0U};
+  std::uint8_t first{0U};
+
+  void OnResponse(std::uint32_t /*request_id*/, MessageView /*message*/) noexcept {}
+  void OnEvent(MessageView message) noexcept {
+    ++events;
+    size = static_cast<std::uint32_t>(message.Body().size());
+    first = 0U == size ? 0U : message.Body()[0U];
+  }
+  void OnTimeout(std::uint32_t /*request_id*/) noexcept {}
+  void OnSubscribeAck(std::uint16_t /*service_id*/, std::uint16_t /*instance_id*/,
+                      std::uint16_t /*event_group_id*/, std::uint32_t /*granted*/) noexcept {}
+  void OnServiceAvailable(osp::someip::ServiceInstance /*service*/) noexcept {}
+  void OnServiceGone(osp::someip::ServiceInstance /*service*/) noexcept {}
+  void OnSenderRebooted(const osp::someip::Ipv4Endpoint& /*source*/) noexcept {}
+};
+
+}  // namespace
+
+TEST_CASE("tp - client reassembles a segmented event", "[tp][client]") {
+  const auto payload = SamplePayload(0xE0U);
+  CaptureSink sink;
+  EventHandler handler;
+  osp::someip::Client<CaptureSink, EventHandler, 2U, 2U, 512U, osp::someip::NoE2E, 2U, 2U,
+                      TpReassembly<128U, 1U, 1000U>>
+      client(sink, handler, {{127U, 0U, 0U, 1U}, 30510U});
+  std::uint8_t datagram[128] = {};
+  const osp::someip::Ipv4Endpoint peer{{127U, 0U, 0U, 2U}, 30509U};
+
+  const std::uint32_t first = BuildSegment(datagram, 0x00010001U, 16U, false,
+                                           osp::make_span(payload.data() + 16U, 8U),
+                                           MessageType::kNotification);
+  client.HandleDatagram(osp::span<const std::uint8_t>(datagram, first), peer, 0U);
+  REQUIRE(0U == handler.events);
+
+  const std::uint32_t second = BuildSegment(datagram, 0x00010001U, 0U, true,
+                                            osp::make_span(payload.data(), 16U),
+                                            MessageType::kNotification);
+  client.HandleDatagram(osp::span<const std::uint8_t>(datagram, second), peer, 1U);
+  REQUIRE(1U == handler.events);
+  REQUIRE(payload.size() == handler.size);
+  REQUIRE(payload[0U] == handler.first);
 }
