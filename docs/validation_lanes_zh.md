@@ -359,8 +359,10 @@ tools/rtthread_qemu.sh "$PWD/rt-thread"
 - 手工逐项打开后需要：`RT_LWIP_UDP`、`RT_LWIP_TCP`（lwIP 的 `api_lib.c` 在 TCP 关闭时无法编译）、
   `RT_LWIP_IPV4`、`RT_LWIP_DHCP`、`RT_LWIP_DNS`（SAL 引用 `lwip_getaddrinfo`）、
   `RT_USING_LWIP_IPV6`（netdev 头文件无条件使用 `ip6_addr_t`），最后还要求 `NETDEV_IPV6`。
-- 卡在 RT-Thread 5.4 的 `netdev.h`：它写的是 `#if NETDEV_IPV6`，而 Kconfig 布尔开关生成的是空宏
-  `#define NETDEV_IPV6`，预处理器直接报 `#if with no expression`。
+- 卡在 RT-Thread 5.4 的 `netdev.h`、`netdev_ipaddr.h`：它们写的是 `#if NETDEV_IPV6` / `#if LWIP_IPV6`，
+  而 Kconfig 布尔开关生成的是空宏 `#define NETDEV_IPV6`，预处理器直接报 `#if with no expression`。
+- 关掉 IPv6 也不行：RT-Thread 打过补丁的 lwIP `netif.c` 在 IPv6 分支里直接引用
+  `netdev_get_by_name(netif->name)->ip6_addr[i]`，于是 netdev 与 IPv6 必须同时开——正好落进上面的缺陷。
 
 结论：这条路径应当用 `scons --menuconfig` 正常生成配置（或改用 lwIP raw socket 绕过 netdev/SAL），
 而不是手工改 `.config`。当前仓库只保留不依赖网络的 5.1 运行时自检。
