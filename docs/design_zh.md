@@ -152,8 +152,8 @@ payload / 源端点` 组一个 `IncomingRequest` 交给 `OnRequest`；处理器�
 | L2 互操作 | 与 vsomeip 容器对端做 RPC、通知、订阅 | 双向收发一致 |
 | L3 目标 | ARM Linux / RT-Thread 构建与静态内存报告 | 无堆、尺寸达标 |
 
-当前 L0 结果：93 个用例、1356 条断言，外加零分配见证进程；普通构建与
-`-fno-exceptions -fno-rtti` 构建均通过。
+当前 L0 结果：94 个用例、3657 条断言（含 3000 轮确定性变异扫描），外加零分配见证进程；
+普通构建、`-fno-exceptions -fno-rtti` 构建与 ASan+UBSan 构建均通过。
 
 ## 5. 里程碑与风险
 
