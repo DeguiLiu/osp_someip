@@ -174,6 +174,7 @@ The design notes are written in Chinese.
 
 | Document | Content |
 |---|---|
+| [docs/api_zh.md](docs/api_zh.md) | Public API reference and minimal examples (Chinese) |
 | [docs/design_zh.md](docs/design_zh.md) | Architecture, module split, trade-offs |
 | [docs/validation_lanes_zh.md](docs/validation_lanes_zh.md) | Validation lanes and environment prerequisites |
 | [docs/benchmark_report_zh.md](docs/benchmark_report_zh.md) | Loopback latency baseline |

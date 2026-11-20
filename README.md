@@ -166,6 +166,7 @@ docs/              设计、验证、基准、静态分析文档
 
 | 文档 | 内容 |
 |---|---|
+| [docs/api_zh.md](docs/api_zh.md) | 公开接口速查与最小示例 |
 | [docs/design_zh.md](docs/design_zh.md) | 架构、模块划分、关键取舍 |
 | [docs/validation_lanes_zh.md](docs/validation_lanes_zh.md) | 验证通道与环境前置 |
 | [docs/benchmark_report_zh.md](docs/benchmark_report_zh.md) | 回环性能基线 |
