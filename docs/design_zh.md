@@ -124,6 +124,8 @@ placement new（`vocabulary.hpp`）；本仓库不直接使用 `new`、`delete`�
 Subscribe 带上本地端点选项，Ack/Nack 通过 `OnSubscribeAck` 上报授予的 TTL。
 服务缓存新增或过期/stop-offer 时分别回调 `OnServiceAvailable` 与 `OnServiceGone`，
 与 Rust 的可用性更新流语义对应。
+订阅维护在 `Client` 内：`Subscribe` 建档并立即发送，`Tick` 在 TTL 一半时重发续订，
+收到 Ack 按授予 TTL 重算到期与续订时刻，收到 Nack（TTL=0）或到期未见续订则注销。
 
 ### 3.9 服务端请求分发
 
@@ -150,7 +152,7 @@ payload / 源端点` 组一个 `IncomingRequest` 交给 `OnRequest`；处理器�
 | L2 互操作 | 与 vsomeip 容器对端做 RPC、通知、订阅 | 双向收发一致 |
 | L3 目标 | ARM Linux / RT-Thread 构建与静态内存报告 | 无堆、尺寸达标 |
 
-当前 L0 结果：92 个用例、1345 条断言，外加零分配见证进程；普通构建与
+当前 L0 结果：93 个用例、1356 条断言，外加零分配见证进程；普通构建与
 `-fno-exceptions -fno-rtti` 构建均通过。
 
 ## 5. 里程碑与风险

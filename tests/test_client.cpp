@@ -285,3 +285,45 @@ TEST_CASE("client - service expiry reports gone", "[client]") {
   REQUIRE(0U == client.ServiceCount());
   REQUIRE(1U == handler.gone);
 }
+
+TEST_CASE("client - subscriptions refresh at half ttl and expire without ack", "[client]") {
+  Sink sink;
+  Handler handler;
+  Client<Sink, Handler, 4U, 2U> client(sink, handler, {{127U, 0U, 0U, 1U}, 30510U});
+  const ServiceInstance service = ServiceInstance::New(0x1234U, 0x0001U, 1U);
+  const Ipv4Endpoint source{{127U, 0U, 0U, 2U}, 30490U};
+  std::uint8_t offer[128] = {};
+  client.HandleDatagram(osp::make_span(offer, BuildOffer(offer, 30U, false)), source, 0U);
+
+  REQUIRE(client.Subscribe(service, 0x0001U, 10U, 0U));
+  REQUIRE(1U == client.SubscriptionCount());
+  REQUIRE(client.IsSubscribed(service, 0x0001U));
+  const std::uint32_t after_subscribe = sink.count;
+  REQUIRE(1U == after_subscribe);
+
+  client.Tick(4999U);
+  REQUIRE(after_subscribe == sink.count);
+  client.Tick(5000U);
+  REQUIRE((after_subscribe + 1U) == sink.count);
+
+  SubscribeAckRequest ack;
+  ack.service_id = 0x1234U;
+  ack.instance_id = 0x0001U;
+  ack.event_group_id = 0x0001U;
+  ack.major_version = 1U;
+  ack.ttl = 10U;
+  std::uint8_t ack_bytes[128] = {};
+  const auto ack_size = BuildSubscribeAckDatagram(osp::make_span(ack_bytes), ack, Session(4U));
+  REQUIRE(ack_size.has_value());
+  client.HandleDatagram(osp::make_span(ack_bytes, ack_size.value()), source, 5000U);
+  REQUIRE(1U == handler.acks);
+
+  const std::uint32_t after_ack = sink.count;
+  client.Tick(9999U);
+  REQUIRE(after_ack == sink.count);
+  client.Tick(10000U);
+  REQUIRE((after_ack + 1U) == sink.count);
+
+  client.Tick(15000U);
+  REQUIRE(0U == client.SubscriptionCount());
+}

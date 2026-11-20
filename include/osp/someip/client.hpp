@@ -44,7 +44,7 @@ namespace osp::someip {
  */
 template <typename Sink, typename Handler, std::uint32_t MaxServices = 16U,
           std::uint32_t MaxPending = 4U, std::uint32_t MaxDatagram = 1400U,
-          typename E2E = NoE2E>
+          typename E2E = NoE2E, std::uint32_t MaxSubscriptions = 8U>
 class Client final {
  public:
   static constexpr std::uint32_t kFindRepetitions = 3U;
@@ -116,6 +116,17 @@ class Client final {
       if (slot.active && now_ms >= slot.deadline_ms) {
         slot.active = false;
         handler_.OnTimeout(slot.request_id);
+      }
+    }
+    for (auto& slot : subscriptions_) {
+      if (!slot.active) {
+        continue;
+      }
+      if (now_ms >= slot.expires_ms) {
+        slot.active = false;
+      } else if (now_ms >= slot.refresh_at_ms) {
+        SendSubscribe(slot);
+        slot.refresh_at_ms = now_ms + (slot.ttl_s * 1000U) / 2U;
       }
     }
   }
@@ -196,26 +207,36 @@ class Client final {
   /// @brief Send a SubscribeEventGroup for a cached service.
   bool Subscribe(const ServiceInstance& service, std::uint16_t event_group_id,
                  std::uint32_t ttl_s, std::uint32_t now_ms) noexcept {
-    (void)now_ms;
     const RemoteService* remote = FindCached(service);
-    if (nullptr == remote || ttl_s > sd::kMaxTtl) {
+    SubscriptionSlot* slot = SubscriptionSlotFor(service, event_group_id);
+    if (nullptr == remote || nullptr == slot || ttl_s > sd::kMaxTtl || 0U == ttl_s) {
       return false;
     }
-    SubscribeEventGroupRequest request;
-    request.service_id = service.ServiceId();
-    request.instance_id = service.InstanceId();
-    request.major_version = service.MajorVersion();
-    request.event_group_id = event_group_id;
-    request.ttl = ttl_s;
-    request.local_ip = local_endpoint_.address;
-    request.local_rx_port = local_endpoint_.port;
-    const auto written = BuildSubscribeEventGroupDatagram(
-        osp::make_span(buffer_), request, session_.Next());
-    if (!written.has_value()) {
+    slot->service = service;
+    slot->sd_source = remote->sd_source;
+    slot->event_group_id = event_group_id;
+    slot->ttl_s = ttl_s;
+    slot->expires_ms = now_ms + (ttl_s * 1000U);
+    slot->refresh_at_ms = now_ms + (ttl_s * 1000U) / 2U;
+    slot->active = true;
+    if (!SendSubscribe(*slot)) {
+      slot->active = false;
       return false;
     }
-    sink_(osp::span<const std::uint8_t>(buffer_, written.value()), remote->sd_source);
     return true;
+  }
+
+  /// @brief Number of live subscriptions (acked or awaiting ack).
+  std::uint32_t SubscriptionCount() const noexcept { return CountActive(subscriptions_); }
+
+  bool IsSubscribed(const ServiceInstance& service,
+                    std::uint16_t event_group_id) const noexcept {
+    for (const auto& slot : subscriptions_) {
+      if (slot.active && slot.service == service && slot.event_group_id == event_group_id) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /// @brief Cached service matching service, instance and major version.
@@ -255,6 +276,16 @@ class Client final {
     bool active{false};
   };
 
+  struct SubscriptionSlot final {
+    ServiceInstance service{};
+    Ipv4Endpoint sd_source{};
+    std::uint16_t event_group_id{0U};
+    std::uint32_t ttl_s{0U};
+    std::uint32_t refresh_at_ms{0U};
+    std::uint32_t expires_ms{0U};
+    bool active{false};
+  };
+
   template <typename T, std::uint32_t N>
   static std::uint32_t CountActive(const T (&slots)[N]) noexcept {
     std::uint32_t count = 0U;
@@ -288,6 +319,57 @@ class Client final {
     return nullptr;
   }
 
+  SubscriptionSlot* SubscriptionSlotFor(const ServiceInstance& service,
+                                        std::uint16_t event_group_id) noexcept {
+    SubscriptionSlot* free_slot = nullptr;
+    for (auto& slot : subscriptions_) {
+      if (slot.active && slot.service == service && slot.event_group_id == event_group_id) {
+        return &slot;
+      }
+      if (!slot.active && nullptr == free_slot) {
+        free_slot = &slot;
+      }
+    }
+    return free_slot;
+  }
+
+  bool SendSubscribe(const SubscriptionSlot& slot) noexcept {
+    SubscribeEventGroupRequest request;
+    request.service_id = slot.service.ServiceId();
+    request.instance_id = slot.service.InstanceId();
+    request.major_version = slot.service.MajorVersion();
+    request.event_group_id = slot.event_group_id;
+    request.ttl = slot.ttl_s;
+    request.local_ip = local_endpoint_.address;
+    request.local_rx_port = local_endpoint_.port;
+    const auto written = BuildSubscribeEventGroupDatagram(osp::make_span(buffer_), request,
+                                                          session_.Next());
+    if (!written.has_value()) {
+      return false;
+    }
+    sink_(osp::span<const std::uint8_t>(buffer_, written.value()), slot.sd_source);
+    return true;
+  }
+
+  void HandleSubscriptionResponse(const sd::EntryView& entry, std::uint32_t now_ms) noexcept {
+    const ServiceInstance service =
+        ServiceInstance::New(entry.ServiceId(), entry.InstanceId(), entry.MajorVersion());
+    for (auto& slot : subscriptions_) {
+      if (slot.active && slot.service == service &&
+          slot.event_group_id == entry.EventGroupId()) {
+        if (0U == entry.Ttl()) {
+          slot.active = false;
+        } else {
+          slot.ttl_s = entry.Ttl();
+          slot.expires_ms = now_ms + (slot.ttl_s * 1000U);
+          slot.refresh_at_ms = now_ms + (slot.ttl_s * 1000U) / 2U;
+        }
+      }
+    }
+    handler_.OnSubscribeAck(entry.ServiceId(), entry.InstanceId(), entry.EventGroupId(),
+                            entry.Ttl());
+  }
+
   void HandleResponse(MessageView message) noexcept {
     const std::uint32_t request_id = message.Head().RequestId();
     for (auto& slot : pending_) {
@@ -313,8 +395,7 @@ class Client final {
           break;
         case sd::Entry::Kind::kSubscribeAck:
         case sd::Entry::Kind::kSubscribeNack:
-          handler_.OnSubscribeAck(entry.ServiceId(), entry.InstanceId(),
-                                  entry.EventGroupId(), entry.Ttl());
+          HandleSubscriptionResponse(entry, now_ms);
           break;
         default:
           break;
@@ -393,6 +474,7 @@ class Client final {
   FindSlot finds_[MaxServices]{};
   RemoteService services_[MaxServices]{};
   PendingSlot pending_[MaxPending]{};
+  SubscriptionSlot subscriptions_[MaxSubscriptions]{};
   E2E e2e_{};
   sd::SdSessionCounter session_ = sd::SdSessionCounter::New();
   std::uint16_t session_id_{0U};
