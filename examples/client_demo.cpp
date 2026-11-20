@@ -67,6 +67,14 @@ struct DemoHandler final {
                  static_cast<unsigned>(service.InstanceId()));
   }
 
+  void OnSenderRebooted(const osp::someip::Ipv4Endpoint& source) noexcept {
+    OSP_LOG_WARN("client", "sender %u.%u.%u.%u restarted; caches dropped",
+                 static_cast<unsigned>(source.address[0]),
+                 static_cast<unsigned>(source.address[1]),
+                 static_cast<unsigned>(source.address[2]),
+                 static_cast<unsigned>(source.address[3]));
+  }
+
   void OnSubscribeAck(std::uint16_t service_id, std::uint16_t instance_id,
                       std::uint16_t event_group_id, std::uint32_t granted_ttl) noexcept {
     OSP_LOG_INFO("client", "subscribe ack 0x%04X/0x%04X eg=0x%04X ttl=%u",

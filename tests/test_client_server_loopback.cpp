@@ -81,6 +81,7 @@ struct Handler final {
   }
   void OnServiceAvailable(osp::someip::ServiceInstance /*service*/) noexcept {}
   void OnServiceGone(osp::someip::ServiceInstance /*service*/) noexcept {}
+  void OnSenderRebooted(const osp::someip::Ipv4Endpoint& /*source*/) noexcept {}
 };
 
 }  // namespace

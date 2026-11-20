@@ -44,6 +44,7 @@ struct NullHandler final {
                       std::uint16_t /*event_group_id*/, std::uint32_t /*granted*/) noexcept {}
   void OnServiceAvailable(osp::someip::ServiceInstance /*service*/) noexcept {}
   void OnServiceGone(osp::someip::ServiceInstance /*service*/) noexcept {}
+  void OnSenderRebooted(const osp::someip::Ipv4Endpoint& /*source*/) noexcept {}
 };
 
 struct EchoRequestHandler final {

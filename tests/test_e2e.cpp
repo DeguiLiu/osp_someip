@@ -104,6 +104,7 @@ struct EventHandler final {
                       std::uint32_t /*ttl*/) noexcept {}
   void OnServiceAvailable(ServiceInstance /*service*/) noexcept {}
   void OnServiceGone(ServiceInstance /*service*/) noexcept {}
+  void OnSenderRebooted(const Ipv4Endpoint& /*source*/) noexcept {}
 };
 
 struct CountingRequestHandler final {

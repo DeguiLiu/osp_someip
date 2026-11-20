@@ -70,6 +70,7 @@ struct Handler final {
   std::uint16_t ack_event_group{0U};
   std::uint32_t available{0U};
   std::uint32_t gone{0U};
+  std::uint32_t reboots{0U};
 
   void OnResponse(std::uint32_t request_id, MessageView message) noexcept {
     ++responses;
@@ -96,6 +97,7 @@ struct Handler final {
 
   void OnServiceAvailable(osp::someip::ServiceInstance /*service*/) noexcept { ++available; }
   void OnServiceGone(osp::someip::ServiceInstance /*service*/) noexcept { ++gone; }
+  void OnSenderRebooted(const osp::someip::Ipv4Endpoint& /*source*/) noexcept { ++reboots; }
 };
 
 SdSession Session(std::uint16_t id) noexcept {
@@ -118,6 +120,25 @@ std::uint32_t BuildOffer(std::uint8_t* out, std::uint32_t ttl, bool stop) noexce
                           : BuildOfferServiceDatagram(osp::make_span(out, 128U), request,
                                                       Session(3U));
   return built.has_value() ? built.value() : 0U;
+}
+
+std::uint32_t BuildOfferWithSession(std::uint8_t* out, std::uint32_t ttl,
+                                    SdSession session) noexcept {
+  OfferServiceRequest request;
+  request.service_id = 0x1234U;
+  request.instance_id = 0x0001U;
+  request.major_version = 1U;
+  request.ttl = ttl;
+  request.local_ip = {192U, 0U, 2U, 1U};
+  request.unicast_port = 30501U;
+  const auto built =
+      BuildOfferServiceDatagram(osp::make_span(out, 128U), request, session);
+  return built.has_value() ? built.value() : 0U;
+}
+
+SdSession SessionWith(std::uint16_t id, RebootFlag reboot) noexcept {
+  auto counter = SdSessionCounter::Resume(static_cast<std::uint16_t>(id - 1U), reboot);
+  return counter.Next();
 }
 
 }  // namespace
@@ -326,4 +347,30 @@ TEST_CASE("client - subscriptions refresh at half ttl and expire without ack", "
 
   client.Tick(15000U);
   REQUIRE(0U == client.SubscriptionCount());
+}
+
+TEST_CASE("client - sender reboot drops the caches", "[client]") {
+  Sink sink;
+  Handler handler;
+  Client<Sink, Handler, 4U, 2U> client(sink, handler, {{127U, 0U, 0U, 1U}, 30510U});
+  const Ipv4Endpoint source{{127U, 0U, 0U, 2U}, 30490U};
+  std::uint8_t offer[128] = {};
+
+  const std::uint32_t first =
+      BuildOfferWithSession(offer, 30U, SessionWith(10U, RebootFlag::kContinuous));
+  client.HandleDatagram(osp::make_span(offer, first), source, 0U);
+  REQUIRE(1U == client.ServiceCount());
+
+  const std::uint32_t second =
+      BuildOfferWithSession(offer, 30U, SessionWith(11U, RebootFlag::kContinuous));
+  client.HandleDatagram(osp::make_span(offer, second), source, 10U);
+  REQUIRE(0U == handler.reboots);
+
+  const std::uint32_t rebooted =
+      BuildOfferWithSession(offer, 30U, SessionWith(3U, RebootFlag::kRecentlyRebooted));
+  client.HandleDatagram(osp::make_span(offer, rebooted), source, 20U);
+  REQUIRE(1U == handler.reboots);
+  REQUIRE(1U == handler.gone);
+  REQUIRE(2U == handler.available);
+  REQUIRE(1U == client.ServiceCount());  // the rebooted offer re-populates the cache
 }

@@ -38,13 +38,15 @@ namespace osp::someip {
  *   void OnTimeout(std::uint32_t request_id) noexcept;
  *   void OnServiceAvailable(ServiceInstance service) noexcept;
  *   void OnServiceGone(ServiceInstance service) noexcept;
+ *   void OnSenderRebooted(const Ipv4Endpoint& source) noexcept;
  *   void OnSubscribeAck(std::uint16_t service_id, std::uint16_t instance_id,
  *                       std::uint16_t event_group_id, std::uint32_t granted_ttl_s) noexcept;
  * @endcode
  */
 template <typename Sink, typename Handler, std::uint32_t MaxServices = 16U,
           std::uint32_t MaxPending = 4U, std::uint32_t MaxDatagram = 1400U,
-          typename E2E = NoE2E, std::uint32_t MaxSubscriptions = 8U>
+          typename E2E = NoE2E, std::uint32_t MaxSubscriptions = 8U,
+          std::uint32_t MaxPeers = 8U>
 class Client final {
  public:
   static constexpr std::uint32_t kFindRepetitions = 3U;
@@ -286,6 +288,12 @@ class Client final {
     bool active{false};
   };
 
+  struct PeerSlot final {
+    Ipv4Endpoint source{};
+    std::uint16_t session{0U};
+    bool active{false};
+  };
+
   template <typename T, std::uint32_t N>
   static std::uint32_t CountActive(const T (&slots)[N]) noexcept {
     std::uint32_t count = 0U;
@@ -331,6 +339,44 @@ class Client final {
       }
     }
     return free_slot;
+  }
+
+  /// @brief Records the sender's SD session; true when it restarted.
+  bool TrackSession(const Ipv4Endpoint& source, std::uint16_t session,
+                    sd::Flags flags) noexcept {
+    PeerSlot* free_slot = nullptr;
+    for (auto& slot : peers_) {
+      if (slot.active && slot.source == source) {
+        const bool rebooted =
+            (sd::RebootFlag::kRecentlyRebooted == flags.Reboot()) && (session <= slot.session);
+        slot.session = session;
+        return rebooted;
+      }
+      if (!slot.active && nullptr == free_slot) {
+        free_slot = &slot;
+      }
+    }
+    if (nullptr != free_slot) {
+      free_slot->source = source;
+      free_slot->session = session;
+      free_slot->active = true;
+    }
+    return false;
+  }
+
+  void HandleSenderReboot(const Ipv4Endpoint& source) noexcept {
+    for (auto& slot : services_) {
+      if (slot.active && slot.sd_source == source) {
+        slot.active = false;
+        handler_.OnServiceGone(slot.service);
+      }
+    }
+    for (auto& slot : subscriptions_) {
+      if (slot.active && slot.sd_source == source) {
+        slot.active = false;
+      }
+    }
+    handler_.OnSenderRebooted(source);
   }
 
   bool SendSubscribe(const SubscriptionSlot& slot) noexcept {
@@ -385,6 +431,11 @@ class Client final {
     auto sd_header = message.SdHeader();
     if (!sd_header.has_value()) {
       return;
+    }
+    const std::uint16_t session =
+        static_cast<std::uint16_t>(message.Head().RequestId() & 0xFFFFU);
+    if (TrackSession(source, session, sd_header.value().GetFlags())) {
+      HandleSenderReboot(source);
     }
     sd::EntryView entry;
     while (sd_header.value().NextEntry(entry)) {
@@ -475,6 +526,7 @@ class Client final {
   RemoteService services_[MaxServices]{};
   PendingSlot pending_[MaxPending]{};
   SubscriptionSlot subscriptions_[MaxSubscriptions]{};
+  PeerSlot peers_[MaxPeers]{};
   E2E e2e_{};
   sd::SdSessionCounter session_ = sd::SdSessionCounter::New();
   std::uint16_t session_id_{0U};
