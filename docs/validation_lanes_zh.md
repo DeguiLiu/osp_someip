@@ -131,8 +131,20 @@ ctest --test-dir build/aarch64-tests
 结果：117 个用例通过，1 个跳过（组播），`someip_loopback_bench` 为
 p50 11 µs、p99 24 µs、约 6.6 万次请求/秒。这是 qemu 用户态模拟，不是板上数据。
 
-板上冒烟仍未执行：需要一块 aarch64 板卡，运行 `someip_server_demo --iface <板卡 IP>`，
-主机跑 `tools/sd_probe.py --server <板卡 IP>`，要求发现、订阅、RPC、事件四项全通。
+两个示例程序也在 qemu 下跑通了完整链路（等同板上冒烟的命令）：
+
+```bash
+qemu-aarch64 -L "$AARCH64_TOOLCHAIN_ROOT/usr/aarch64-linux-gnu" \
+    build/aarch64/examples/someip_server_demo --iface 127.0.0.1 --service 1234 --seconds 8 &
+qemu-aarch64 -L "$AARCH64_TOOLCHAIN_ROOT/usr/aarch64-linux-gnu" \
+    build/aarch64/examples/someip_client_demo --server 127.0.0.1 --local 127.0.0.1 \
+    --port 30510 --service 1234 --method 0001 --seconds 5
+```
+
+观察结果：客户端 `available` → `subscribe ack ttl=10` → `response 0x00010001` → 每秒一条
+`event 0x8001`；服务端 `1 subscriber(s)`。
+
+真实板卡仍未验证：需要一块 aarch64 板子，把上面的命令换成板卡 IP 与 `tools/sd_probe.py`。
 
 ## 5. 通道状态总表
 
