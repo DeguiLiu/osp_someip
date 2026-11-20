@@ -91,6 +91,9 @@ cmake --build build-demo -j8
     --port 30510 --service 1234 --method 0001 --seconds 4
 ```
 
+客户端加 `--multicast` 时改用组播 SD：它在 30490 另开一个套接字入组，服务端口仍是 `--port`。
+不加时 SD 与业务共用一个套接字，适合同一台机器上跑两端。
+
 `tools/sd_probe.py` 是只用 Python 标准库的第二套实现，可以当服务端或客户端，用来核对字节级别
 的编解码是否一致：
 

@@ -164,16 +164,23 @@ int main(int argc, char** argv) {
     return 2;
   }
 
-  osp::UdpSocket sd_socket;
   osp::UdpSocket service_socket;
-  if (!CreateBound(osp::someip::kSdPort, sd_socket) ||
-      !CreateBound(options.local_port, service_socket)) {
-    std::printf("failed to bind UDP %u/%u\n",
-                static_cast<unsigned>(osp::someip::kSdPort),
+  if (!CreateBound(options.local_port, service_socket)) {
+    std::printf("failed to bind local UDP port %u\n",
                 static_cast<unsigned>(options.local_port));
     return 1;
   }
+
+  // Multicast SD needs its own socket on 30490: the group port is fixed, while
+  // the service socket keeps the local port. Unicast SD replies come back to
+  // the socket that sent the find, so one socket is enough there.
+  osp::UdpSocket sd_socket;
   if (options.use_multicast) {
+    if (!CreateBound(osp::someip::kSdPort, sd_socket)) {
+      std::printf("failed to bind SD UDP port %u\n",
+                  static_cast<unsigned>(osp::someip::kSdPort));
+      return 1;
+    }
     if (!osp::someip::JoinSdMulticast(sd_socket, options.local)) {
       std::printf("failed to join the SD multicast group on the local interface\n");
       return 1;
@@ -181,7 +188,7 @@ int main(int argc, char** argv) {
     (void)osp::someip::SetSdMulticastInterface(sd_socket, options.local);
   }
 
-  ClientSink sink{&sd_socket, &service_socket};
+  ClientSink sink{options.use_multicast ? &sd_socket : &service_socket, &service_socket};
   DemoHandler handler;
   const osp::someip::Ipv4Endpoint local{options.local, options.local_port};
   const osp::someip::Ipv4Endpoint server =
@@ -205,8 +212,10 @@ int main(int argc, char** argv) {
 
     std::uint8_t buffer[1500] = {};
     osp::SocketAddress from;
-    for (std::uint32_t pass = 0U; pass < 2U; ++pass) {
-      osp::UdpSocket& socket = (0U == pass) ? sd_socket : service_socket;
+    const std::uint32_t passes = options.use_multicast ? 2U : 1U;
+    for (std::uint32_t pass = 0U; pass < passes; ++pass) {
+      osp::UdpSocket& socket =
+          (options.use_multicast && 0U == pass) ? sd_socket : service_socket;
       for (;;) {
         const auto received = socket.RecvFrom(buffer, sizeof(buffer), from);
         if (!received.has_value()) {

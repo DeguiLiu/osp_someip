@@ -96,6 +96,10 @@ cmake --build build-demo -j8
     --port 30510 --service 1234 --method 0001 --seconds 4
 ```
 
+Passing `--multicast` to the client switches SD to the multicast group: it opens a second socket
+on 30490 while the service traffic stays on `--port`. Without the flag, SD and service share one
+socket, which suits two processes on the same host.
+
 `tools/sd_probe.py` is an independent implementation that uses only the Python standard library. It
 can act as either side of the exchange, which makes it useful for checking byte-level compatibility:
 
