@@ -1,0 +1,18 @@
+/**
+ * @file someip.hpp
+ * @brief Umbrella include for the SOME/IP wire codec.
+ */
+
+#ifndef OSP_SOMEIP_SOMEIP_HPP_
+#define OSP_SOMEIP_SOMEIP_HPP_
+
+#include "osp/someip/error.hpp"
+#include "osp/someip/header.hpp"
+#include "osp/someip/message.hpp"
+#include "osp/someip/message_id.hpp"
+#include "osp/someip/message_type.hpp"
+#include "osp/someip/payload.hpp"
+#include "osp/someip/return_code.hpp"
+#include "osp/someip/wire.hpp"
+
+#endif  // OSP_SOMEIP_SOMEIP_HPP_
