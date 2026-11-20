@@ -205,6 +205,13 @@ qemu-user 只翻译指令与系统调用，调度、内核网络栈与用户态 
 
 - 内核：Alpine 3.20 `vmlinuz-virt`。它是 zimg 封装，先用脚本从文件中找到 gzip 载荷解出
   raw Image（偏移 0x38 处应为 `ARM\x64`），QEMU 才能用 `-kernel` 加载。
+  这一步与 busybox 的下载已脚本化：
+
+  ```bash
+  tools/fetch_arm_vm_assets.sh build/arm-vm   # 官方 CDN 失败时自动切清华镜像
+  ```
+
+  产出 `build/arm-vm/Image` 与 `build/arm-vm/busybox.static`，都不入库。
 - 用户态：busybox-static（apk 包里的 `bin/busybox.static`）加交叉工具链里的
   `ld-linux-aarch64.so.1`、`libc`、`libm`、`libgcc_s`、`libstdc++`。
 - init：挂 proc/sys/dev，`ip link set lo up`，跑测试与基准，然后 `poweroff -f`。
