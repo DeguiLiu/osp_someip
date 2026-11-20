@@ -97,6 +97,9 @@ cmake --build build-demo -j8
     --port 30510 --service 1234 --method 0001 --seconds 4
 ```
 
+`someip_fragmented_demo` needs no sockets: it protects a 300-byte request with E2E Profile 1,
+splits it into 19 TP segments, feeds them to a server and verifies the protected reply.
+
 Passing `--multicast` to the client switches SD to the multicast group: it opens a second socket
 on 30490 while the service traffic stays on `--port`. Without the flag, SD and service share one
 socket, which suits two processes on the same host.

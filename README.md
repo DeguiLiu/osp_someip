@@ -92,6 +92,9 @@ cmake --build build-demo -j8
     --port 30510 --service 1234 --method 0001 --seconds 4
 ```
 
+`someip_fragmented_demo` 不需要套接字：一条 300 字节请求先经 E2E Profile 1 保护，
+再切成 19 个 TP 分段送进服务端，最后校验服务端回复的保护头与载荷。
+
 客户端加 `--multicast` 时改用组播 SD：它在 30490 另开一个套接字入组，服务端口仍是 `--port`。
 不加时 SD 与业务共用一个套接字，适合同一台机器上跑两端。
 
