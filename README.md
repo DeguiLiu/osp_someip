@@ -170,9 +170,9 @@ docs/              设计、验证、基准、静态分析文档
 - vsomeip 3.4.10 双向互操作已通过（用户命名空间加 veth 对连，不用 Docker）：
   服务端侧收到订阅、事件与 RPC 应答，客户端侧完成发现、订阅、RPC 与事件。
   复现见 `tools/vsomeip_interop.sh` 与 `docs/validation_lanes_zh.md`。
-- RT-Thread：核心 24 个头文件用桩 `rtthread.h`、`-DOSP_PLATFORM_RTTHREAD=1` 编译通过；
-  lwIP 后端（`OSP_NET_BACKEND=1`）对 lwIP 2.2.0 头文件零告警通过类型检查；
-  实机收发与运行时仍未验证。
+- RT-Thread：核心 24 个头文件用桩 `rtthread.h` 编译通过，lwIP 后端对 lwIP 2.2.0 头文件
+  零告警通过类型检查；在 qemu-vexpress-a9 上完成 15 项运行时自检（`tools/rtthread_qemu.sh`）。
+  真实板卡与 lwIP 收发仍未验证。
 - SOME/IP-TP 按 16 字节单元记录到达情况，乱序可重组，重叠分段丢弃；E2E 只带 Profile 1，
   Profile 2 是按周期推进的状态机：数据到达时调 `Check()`，某周期没有数据时调一次 `Cycle()`；
   状态经 `E2ECheck::status` 暴露（kRepeated / kOkSomeLost / kSync / kWrongSequence）。

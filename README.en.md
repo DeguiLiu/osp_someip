@@ -178,9 +178,9 @@ docs/               design, validation, benchmark and static-analysis notes
 - vsomeip 3.4.10 interop passes in both directions. The two stacks run in separate network
   namespaces joined by a veth pair, so Docker is not needed; see `tools/vsomeip_interop.sh` and
   `docs/validation_lanes_zh.md`.
-- RT-Thread: the 24 core headers compile with `-DOSP_PLATFORM_RTTHREAD=1` against a stub
-  `rtthread.h`, and the lwIP backend (`OSP_NET_BACKEND=1`) type-checks against lwIP 2.2.0
-  headers with no warnings; runtime behaviour on a board is still unverified.
+- RT-Thread: the 24 core headers compile against a stub `rtthread.h`, the lwIP backend
+  type-checks against lwIP 2.2.0 headers, and 15 runtime self-checks pass on qemu-vexpress-a9
+  (`tools/rtthread_qemu.sh`). Real boards and lwIP traffic are still unverified.
 - SOME/IP-TP tracks 16-byte units, so segments may arrive in any order; overlapping segments are
   dropped. E2E ships Profiles 1, 2, 4, 5 and 7. Profile 2 is cyclic: call `Check()` when data arrives and
 `Cycle()` once per cycle without data; the state machine's outcome is reported through

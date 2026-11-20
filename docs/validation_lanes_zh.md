@@ -330,9 +330,29 @@ tools/check_lwip.sh g++ "$PWD/lwip" ../newosp/include
 结果：`osp/socket.hpp` 与 `udp_link.hpp` 在 `-DOSP_NET_BACKEND=1`、`-Wall -Wextra` 下零告警
 编译通过。
 
+### 5.1 运行时（qemu-vexpress-a9，已执行）
+
+在同一台机器上用 `arm-none-eabi-g++` 构建 RT-Thread 5.4.0 的 `qemu-vexpress-a9` BSP，
+把 `tools/rtthread/someip_selfcheck.cpp` 放进 `applications/`，用 `INIT_APP_EXPORT` 在启动时
+跑 15 项自检（头编解码、SD Find 构建与解析、E2E Profile 4 保护/校验、TP 重组、Server offer 与
+Find 应答）。
+
+```bash
+git clone --depth 1 https://ghfast.top/https://github.com/RT-Thread/rt-thread.git rt-thread
+tools/rtthread_qemu.sh "$PWD/rt-thread"
+# someip_rtthread_checks=15 failures=0
+```
+
+脚本会幂等地把两个 include 路径加进 `applications/SConscript`，并在 `rtconfig.py` 的
+`CXXFLAGS` 里补 `-std=c++17 -fno-exceptions -fno-rtti`——RT-Thread 的 BSP 默认按 gnu++14
+编译 C++，不加这一项会在 `SdSessionCounter` 的保证消除拷贝处直接编译失败。
+
+镜像体积：加入 osp-someip 与 C++ 运行支持后，`rtthread.elf` 的 text 从 556,259 字节增至
+615,135 字节（+58,876），这是 C++ 运行库与 15 项自检代码的总量。
+
 仍**不能**证明：
 
-- 收发、定时、中断上下文下的运行行为；
+- 真实板卡上的收发、定时与中断上下文行为；
 - 栈与中断占用，以及 lwIP 与 RT-Thread 的具体版本组合。
 
 这些都需要 RT-Thread SDK 与板子，和板级实测一并列为待办。
@@ -350,4 +370,5 @@ tools/check_lwip.sh g++ "$PWD/lwip" ../newosp/include
 | vsomeip 容器方式 | 未执行 | 用户不在 docker 组，已被 netns 方式替代 |
 | ARM 板卡冒烟 | 待执行 | 没有目标板 |
 | RT-Thread 核心头文件编译 | 完成（桩 SDK） | 24 个核心头文件通过 |
+| RT-Thread 运行时（qemu-vexpress-a9） | 完成 | 15 项自检全过；实机未验证 |
 | lwIP socket 后端类型检查 | 完成（lwIP 2.2.0 头文件） | `socket.hpp` + `udp_link.hpp` 零告警；运行时未验证 |
