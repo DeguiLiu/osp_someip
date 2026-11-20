@@ -40,9 +40,10 @@ exec unshare -rmn bash -s <<'INNER'
 set -eu
 ip link set lo up
 
-unshare -n bash -c 'echo $$ > /tmp/someip-peer.pid; sleep 120' &
+PID_FILE=$(mktemp)
+unshare -n bash -c "echo \$\$ > '$PID_FILE'; sleep 120" &
 sleep 1
-PEER_NS=$(cat /tmp/someip-peer.pid)
+PEER_NS=$(cat "$PID_FILE")
 
 ip link add veth0 type veth peer name veth1
 ip link set veth1 netns "$PEER_NS"
@@ -99,19 +100,18 @@ if [ "$MODE" = "server" ]; then
         sleep 3; echo "subscribe 1234 0001 0001 1 8001 -"
         sleep 3; echo "call 1234 0001 0001 deadbeef"
         sleep 4; echo quit
-    } | nsenter -t "$PEER_NS" -n "$PEER_BIN"
-    wait
+    } | timeout 30 nsenter -t "$PEER_NS" -n "$PEER_BIN"
 else
     {
         echo "offer 1234 0001 1 0001 8001 - 0001"
         sleep 8; echo "notify 1234 0001 8001 c0ffee"
         sleep 4; echo quit
-    } | nsenter -t "$PEER_NS" -n "$PEER_BIN" &
+    } | timeout 30 nsenter -t "$PEER_NS" -n "$PEER_BIN" &
     PEER_JOB=$!
     sleep 3
     "$DEMO_DIR/someip_client_demo" --server "$PEER_IP" --local "$OUR_IP" \
         --port 30510 --service 1234 --method 0001 --multicast \
         --seconds "$SECONDS_TO_RUN"
-    wait "$PEER_JOB"
+    wait "$PEER_JOB" || true
 fi
 INNER

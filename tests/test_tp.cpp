@@ -98,25 +98,41 @@ TEST_CASE("tp - segments reassemble in order", "[tp]") {
   REQUIRE(0 == std::memcmp(out.Body().data(), payload.data(), payload.size()));
 }
 
-TEST_CASE("tp - out-of-order and oversized segments are dropped", "[tp]") {
+TEST_CASE("tp - segments may arrive out of order", "[tp]") {
   const auto payload = SamplePayload(0xB0U);
   TpReassembly<64U, 1U, 1000U> reassembly;
   std::uint8_t datagram[128] = {};
   MessageView out;
 
-  const std::uint32_t late =
-      BuildSegment(datagram, 1U, 16U, true, osp::make_span(payload.data(), 8U));
-  REQUIRE(!reassembly.Feed(ParseSegment(datagram, late), 0U, out));
+  const std::uint32_t tail =
+      BuildSegment(datagram, 1U, 16U, false, osp::make_span(payload.data() + 16U, 8U));
+  REQUIRE(!reassembly.Feed(ParseSegment(datagram, tail), 0U, out));
+  REQUIRE(1U == reassembly.ActiveCount());
+
+  const std::uint32_t head =
+      BuildSegment(datagram, 1U, 0U, true, osp::make_span(payload.data(), 16U));
+  REQUIRE(reassembly.Feed(ParseSegment(datagram, head), 1U, out));
   REQUIRE(0U == reassembly.ActiveCount());
+  REQUIRE(payload.size() == out.Body().size());
+  REQUIRE(0 == std::memcmp(out.Body().data(), payload.data(), payload.size()));
+}
+
+TEST_CASE("tp - overlapping and oversized segments are dropped", "[tp]") {
+  const auto payload = SamplePayload(0xC0U);
+  TpReassembly<64U, 1U, 1000U> reassembly;
+  std::uint8_t datagram[128] = {};
+  MessageView out;
 
   const std::uint32_t start =
-      BuildSegment(datagram, 1U, 0U, true, osp::make_span(payload.data(), 16U));
+      BuildSegment(datagram, 1U, 0U, true, osp::make_span(payload.data(), 24U));
   REQUIRE(!reassembly.Feed(ParseSegment(datagram, start), 0U, out));
   REQUIRE(1U == reassembly.ActiveCount());
 
-  const std::uint32_t gap =
-      BuildSegment(datagram, 1U, 32U, false, osp::make_span(payload.data(), 8U));
-  REQUIRE(!reassembly.Feed(ParseSegment(datagram, gap), 1U, out));
+  // Bytes 16..24 are already stored; a segment that starts there contradicts
+  // the assembly instead of completing it.
+  const std::uint32_t overlap =
+      BuildSegment(datagram, 1U, 16U, false, osp::make_span(payload.data() + 16U, 8U));
+  REQUIRE(!reassembly.Feed(ParseSegment(datagram, overlap), 1U, out));
   REQUIRE(0U == reassembly.ActiveCount());
 
   const std::uint32_t beyond =

@@ -5,8 +5,9 @@
  * A TP segment carries a four-byte header at the start of its payload: a
  * 28-bit offset in 16-byte units, three reserved bits, and the more-segments
  * flag. Reassembly stores segments in a fixed buffer indexed by
- * (message ID, request ID), requires in-order arrival, and drops an
- * assembly after a timeout. Nothing allocates.
+ * (message ID, request ID), tracks which 16-byte units have arrived so the
+ * segments may come in any order, and drops an assembly after a timeout or on
+ * overlapping segments. Nothing allocates.
  */
 
 #ifndef OSP_SOMEIP_TP_HPP_
@@ -120,21 +121,32 @@ class TpReassembly final {
       Drop(head.Id(), head.RequestId());
       return false;
     }
-    const std::int32_t index =
-        (0U == tp.offset) ? Begin(head, now_ms) : Find(head.Id(), head.RequestId());
+    // A later segment may arrive before the first one, so any segment can start
+    // an assembly. A segment that overlaps what is already stored is a
+    // retransmission when it starts at offset 0 and a contradiction otherwise.
+    std::int32_t index = Find(head.Id(), head.RequestId());
     if (index < 0) {
-      return false;
+      index = Begin(head, now_ms);
+    } else if (Overlaps(slots_[static_cast<std::size_t>(index)], tp.offset,
+                        static_cast<std::uint32_t>(data.size()))) {
+      if (0U != tp.offset) {
+        slots_[static_cast<std::size_t>(index)].active = false;
+        return false;
+      }
+      index = Begin(head, now_ms);
     }
     Slot& slot = slots_[static_cast<std::size_t>(index)];
-    if (slot.received != tp.offset) {
-      slot.active = false;
-      return false;
-    }
     const std::size_t base = static_cast<std::size_t>(kHeaderSize) + tp.offset;
     std::memcpy(buffers_[static_cast<std::size_t>(index)].data() + base, data.data(), data.size());
-    slot.received = tp.offset + static_cast<std::uint32_t>(data.size());
+    MarkUnits(slot, tp.offset, static_cast<std::uint32_t>(data.size()));
+    if (!tp.more) {
+      slot.total = tp.offset + static_cast<std::uint32_t>(data.size());
+    }
     slot.last_ms = now_ms;
-    return tp.more ? false : Finish(index, out);
+    if (0U == slot.total || !Complete(slot, slot.total)) {
+      return false;
+    }
+    return Finish(index, out);
   }
 
   /// @brief Drop assemblies that have not seen a segment within TimeoutMs.
@@ -165,8 +177,10 @@ class TpReassembly final {
     std::uint8_t interface_version{0U};
     ReturnCode code{ReturnCode::Ok()};
     MessageType type{MessageType::kRequest};
-    std::uint32_t received{0U};
+    /// @brief End of the message, known once the last segment arrives.
+    std::uint32_t total{0U};
     std::uint32_t last_ms{0U};
+    std::array<std::uint8_t, (MaxPayload / TpHeader::kOffsetUnit + 7U) / 8U> covered{};
   };
 
   using Buffer = std::array<std::uint8_t, static_cast<std::size_t>(MaxPayload) + kHeaderSize>;
@@ -198,8 +212,9 @@ class TpReassembly final {
     slot.interface_version = head.InterfaceVersion();
     slot.code = head.Code();
     slot.type = head.Type().Type();
-    slot.received = 0U;
+    slot.total = 0U;
     slot.last_ms = now_ms;
+    slot.covered.fill(0U);
     return chosen;
   }
 
@@ -220,10 +235,46 @@ class TpReassembly final {
     }
   }
 
+  static bool UnitBit(const Slot& slot, std::uint32_t unit) noexcept {
+    return 0U != (slot.covered[unit / 8U] & static_cast<std::uint8_t>(1U << (unit % 8U)));
+  }
+
+  static void MarkUnits(Slot& slot, std::uint32_t offset, std::uint32_t length) noexcept {
+    const std::uint32_t first = offset / TpHeader::kOffsetUnit;
+    const std::uint32_t last = (offset + length + TpHeader::kOffsetUnit - 1U) / TpHeader::kOffsetUnit;
+    for (std::uint32_t unit = first; unit < last; ++unit) {
+      slot.covered[unit / 8U] =
+          static_cast<std::uint8_t>(slot.covered[unit / 8U] | (1U << (unit % 8U)));
+    }
+  }
+
+  /// @brief True when any 16-byte unit of the new segment is already filled.
+  static bool Overlaps(const Slot& slot, std::uint32_t offset, std::uint32_t length) noexcept {
+    const std::uint32_t first = offset / TpHeader::kOffsetUnit;
+    const std::uint32_t last = (offset + length + TpHeader::kOffsetUnit - 1U) / TpHeader::kOffsetUnit;
+    for (std::uint32_t unit = first; unit < last; ++unit) {
+      if (UnitBit(slot, unit)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// @brief True when every unit up to @p total has arrived.
+  static bool Complete(const Slot& slot, std::uint32_t total) noexcept {
+    const std::uint32_t units = (total + TpHeader::kOffsetUnit - 1U) / TpHeader::kOffsetUnit;
+    for (std::uint32_t unit = 0U; unit < units; ++unit) {
+      if (!UnitBit(slot, unit)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   bool Finish(std::int32_t index, MessageView& out) noexcept {
     Slot& slot = slots_[static_cast<std::size_t>(index)];
     Buffer& buffer = buffers_[static_cast<std::size_t>(index)];
-    const std::uint32_t total = slot.received;
+    const std::uint32_t total = slot.total;
     const Header header = Header::New(
         slot.id, slot.request_id, slot.protocol_version, slot.interface_version,
         MessageTypeField::New(slot.type, false), slot.code, total);

@@ -9,7 +9,7 @@
 | 范围内 | 范围外 |
 |---|---|
 | SOME/IP 头、消息、SD entry/option 编解码 | E2E Profile 2/4/5/7 |
-| SOME/IP-TP 分段头与定容重组 | SOME/IP-TP 乱序重组（只接受按序到达） |
+| SOME/IP-TP 分段头与定容重组（含乱序） | SOME/IP-TP 重叠分段容忍 |
 | 服务端 offer/stop-offer、事件发布、订阅管理 | mTLS 与安全传输 |
 | E2E 钩子与 Profile 1（CRC-8 + 计数器） | 动态分配、vtable 多态、工厂模式 |
 | 客户端发现缓存、订阅、请求-响应匹配 | TLS/mTLS 与安全传输 |
@@ -170,7 +170,8 @@ CRC-8 采用 SAE J1850 参数（poly 0x1D、init 0xFF、终值异或 0xFF），�
 
 `TpHeader` 解析四字节分段头：28 位偏移以 16 字节为单位，低 1 位为 more 标志，保留位非零即拒绝。
 `TpReassembly<MaxPayload, MaxSessions, TimeoutMs>` 按（消息 ID，请求 ID）找槽位，
-要求分段严格按序到达，偏移与已收字节不一致时丢弃整条组装；超时未收到新分段同样丢弃。
+按 16 字节单元记录哪些字节已到达，因此分段可以乱序；与已收单元重叠的分段视为矛盾并丢弃整条组装，
+偏移 0 的重发则重新开始。超时未收到新分段同样丢弃。
 重组完成后在现场缓冲区头部重建一个去掉 TP 标志的 16 字节头，返回 `MessageView`，
 因此上层的 E2E 检查、RPC 分发和 SD 解析都无需区分是否经过分段。
 策略默认 `NoTpReassembly`，不占内存；容量按 `MaxSessions * (MaxPayload + 16)` 计算。
@@ -184,9 +185,9 @@ CRC-8 采用 SAE J1850 参数（poly 0x1D、init 0xFF、终值异或 0xFF），�
 | L2 互操作 | 与 vsomeip 容器对端做 RPC、通知、订阅 | 双向收发一致 |
 | L3 目标 | ARM Linux / RT-Thread 构建与静态内存报告 | 无堆、尺寸达标 |
 
-当前 L0/L1 结果：116 个用例、3831 条断言（含 3000 轮确定性变异扫描），外加零分配见证进程；
+当前 L0/L1 结果：117 个用例、3838 条断言（含 3000 轮确定性变异扫描），外加零分配见证进程；
 普通构建、`-fno-exceptions -fno-rtti` 构建与 ASan+UBSan 构建均通过。L2 的组播在真实网卡
-（`ens192`）上验证；L3 完成 aarch64 交叉构建与 qemu 运行，115 过、1 跳过。
+（`ens192`）上验证；L3 完成 aarch64 交叉构建与 qemu 运行，116 过、1 跳过。
 
 ## 5. 里程碑与风险
 

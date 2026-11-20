@@ -20,7 +20,7 @@ SOME/IP-TP 重组、E2E Profile 1、真实网卡组播与 vsomeip 双向互操�
 | 能力 | Rust | 本项目 | 说明 |
 |---|---|---|---|
 | SOME/IP 头、消息、遍历 | 有 | 有 | 逐字节对齐 19 条 golden |
-| SOME/IP-TP | 遍历时跳过并计数（`protocol/tp` 只有占位模块） | 跳过并计数；另提供 `TpReassembly` 按序重组 | 本项目多一层重组能力 |
+| SOME/IP-TP | 遍历时跳过并计数（`protocol/tp` 只有占位模块） | 跳过并计数；另提供 `TpReassembly`，按 16 字节单元记录到达情况，支持乱序 | 本项目多一层重组能力 |
 | SD entry/option/header 编解码 | 有 | 有 | entry/option 均含零拷贝视图 |
 | SD 数据报构建（Find/Offer/Stop/Subscribe/Ack） | 有 | 有 | 本项目另含 Find 构建器 |
 | 服务端 offer / 订阅 / 事件发布 | 有（async） | 有（同步核心） | 本项目含 TTL 到期与 TTL/2 重播 |
@@ -49,7 +49,7 @@ SOME/IP-TP 重组、E2E Profile 1、真实网卡组播与 vsomeip 双向互操�
 
 | 项 | Rust | 本项目 |
 |---|---|---|
-| 单元/集成测试 | 540 个 `#[test]` + 285 个 `#[tokio::test]` | 116 个用例、3831 条断言（含变异扫描） |
+| 单元/集成测试 | 540 个 `#[test]` + 285 个 `#[tokio::test]` | 117 个用例、3838 条断言（含变异扫描） |
 | 线格式 golden | 19 条手写字面量 | 19 条同源字面量（逐字节移植） |
 | 无分配 | `no_alloc_witness` 测试 | `someip_no_alloc` 进程，覆盖 server + client |
 | 真实网络 | tokio + vsomeip 容器互操作 | 真实 UDP 用例 + 双进程 demo + Python 探针 + vsomeip 双向互操作 |
@@ -61,4 +61,4 @@ SOME/IP-TP 重组、E2E Profile 1、真实网卡组播与 vsomeip 双向互操�
 
 1. **板级实测**：aarch64 已完成交叉构建与 qemu 运行，仍缺真实板卡的内存与吞吐数据。
 2. **互操作广度**：vsomeip 3.4.10 的常规路径已通过；TLS、TP 事件与跨交换机组播未覆盖。
-3. **TP 乱序与重叠分段**：当前按序重组，乱序直接丢弃；Rust 侧未实现重组，因此没有可对照的行为。
+3. **TP 重叠分段**：乱序已支持，重叠分段直接丢弃；Rust 侧未实现重组，因此没有可对照的行为。

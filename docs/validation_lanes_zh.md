@@ -21,7 +21,7 @@ setarch $(uname -m) -R env ASAN_OPTIONS=detect_leaks=1 ./build-asan/tests/someip
 ./build/tests/someip_no_alloc          # exit 0 表示零分配
 ```
 
-验收：116 个用例 / 3831 条断言全过；sanitizer 无报告；零分配进程返回 0。
+验收：117 个用例 / 3838 条断言全过；sanitizer 无报告；零分配进程返回 0。
 
 跨实现互通（已验证，双向）：
 
@@ -128,7 +128,7 @@ ctest --test-dir build/aarch64-tests
 `qemu-aarch64 -L <root>/usr/aarch64-linux-gnu`，CTest 因此可以直接运行目标二进制。
 `LD_LIBRARY_PATH` 是解包后的 binutils 依赖，只在构建时需要。
 
-结果：115 个用例通过，1 个跳过（组播），`someip_loopback_bench` 为
+结果：116 个用例通过，1 个跳过（组播），`someip_loopback_bench` 为
 p50 11 µs、p99 24 µs、约 6.6 万次请求/秒。这是 qemu 用户态模拟，不是板上数据。
 
 板上冒烟仍未执行：需要一块 aarch64 板卡，运行 `someip_server_demo --iface <板卡 IP>`，
