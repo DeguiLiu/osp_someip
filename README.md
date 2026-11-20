@@ -16,7 +16,7 @@
 | Service Discovery | entry / option / header 编解码、数据报构建器、零拷贝解析（M1） |
 | 服务端 | offer/stop-offer、find 应答、订阅槽表、事件发布、TTL 到期与 offer 重播（M2） |
 | 零堆 | 全局 `operator new` 计数见证进程，完整场景 0 次分配 |
-| 测试 | 80 个用例、1212 条断言，普通构建与无异常构建均通过 |
+| 测试 | 81 个用例、1241 条断言，含真实 UDP 环回用例；普通构建与无异常构建均通过 |
 
 ## 目录结构
 

@@ -24,6 +24,7 @@
 #include "osp/someip/sd_codec.hpp"
 #include "osp/someip/server.hpp"
 #include "osp/someip/service_instance.hpp"
+#include "osp/someip/udp_link.hpp"
 #include "osp/someip/wire.hpp"
 
 #endif  // OSP_SOMEIP_SOMEIP_HPP_

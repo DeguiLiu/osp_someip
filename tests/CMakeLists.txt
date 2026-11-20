@@ -16,6 +16,8 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(Catch2)
 include(Catch)
 
+find_package(Threads REQUIRED)
+
 # Compile-only guard: every header, including the server template, must build
 # under the interface flags (notably -fno-exceptions -fno-rtti when enabled).
 add_library(someip_header_smoke OBJECT header_smoke.cpp)
@@ -37,8 +39,9 @@ add_executable(someip_tests
     test_sd_header.cpp
     test_sd_parse.cpp
     test_server.cpp
+    test_udp_loopback.cpp
 )
-target_link_libraries(someip_tests Catch2::Catch2WithMain osp_someip)
+target_link_libraries(someip_tests Catch2::Catch2WithMain osp_someip Threads::Threads)
 
 if(SOMEIP_NO_EXCEPTIONS)
     target_compile_options(someip_tests PRIVATE -fno-exceptions -fno-rtti)

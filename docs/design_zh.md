@@ -105,6 +105,13 @@ placement new（`vocabulary.hpp`）；本仓库不直接使用 `new`、`delete`�
 替换全局 `operator new` 后要求分配计数为 0，任何后续引入的 `std::vector` / `std::string`
 会直接让该进程返回非零。
 
+### 3.7 UDP 接入
+
+`udp_link.hpp` 只做两件事：把 `Ipv4Endpoint` 转成 `osp::SocketAddress`（`FromIpv4Bytes`，不走文本），
+以及把 `Server` 的发送通过 `UdpSocket::SendTo` 发出；接收侧由调用方 `RecvFrom` 后把源地址转回
+`Ipv4Endpoint` 再交给 `Server::HandleDatagram`。`tests/test_udp_loopback.cpp` 用真实 UDP 套接字在
+127.0.0.1 上跑通 find → offer → subscribe → ack → notification 全链路，不依赖 Docker 与组播。
+
 ## 4. 验证策略
 
 | 层级 | 内容 | 判定 |
@@ -114,7 +121,7 @@ placement new（`vocabulary.hpp`）；本仓库不直接使用 `new`、`delete`�
 | L2 互操作 | 与 vsomeip 容器对端做 RPC、通知、订阅 | 双向收发一致 |
 | L3 目标 | ARM Linux / RT-Thread 构建与静态内存报告 | 无堆、尺寸达标 |
 
-当前 L0 结果：80 个用例、1212 条断言，外加零分配见证进程；普通构建与
+当前 L0 结果：81 个用例、1241 条断言，外加零分配见证进程；普通构建与
 `-fno-exceptions -fno-rtti` 构建均通过。
 
 ## 5. 里程碑与风险
