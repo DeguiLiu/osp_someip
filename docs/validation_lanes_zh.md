@@ -36,6 +36,10 @@ python3 tools/sd_probe.py --mode server --service 1234 --seconds 6 &
     --port 30510 --service 1234 --method 0001 --seconds 3
 ```
 
+订阅续订实测：Python 服务端运行 15 s、C++ 客户端运行 12 s，服务端记录 3 次
+`subscribe from`（初始 + TTL/2 两次续订），客户端收到 12 条事件；offer TTL 到期后客户端
+按预期打印 `service ... gone`。
+
 ## 2. vsomeip 互操作通道（当前阻塞）
 
 当前诊断（2026-11-20）：`dockerd` 正在运行、`docker.service` 为 active，但

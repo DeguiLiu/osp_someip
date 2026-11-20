@@ -407,3 +407,36 @@ TEST_CASE("server - own announcement is not reported as remote", "[server][obser
   server.HandleDatagram(osp::make_span(buffer, size), {{127U, 0U, 0U, 2U}, 30490U}, 0U);
   REQUIRE(0U == server.ObserverHandler().available);
 }
+
+TEST_CASE("server - wildcard find matches every offer", "[server][sd]") {
+  Capture capture;
+  Server<Capture, 2U, 2U> server(capture);
+  REQUIRE(server.Offer(ServiceInstance::New(0x1111U, 0x0001U, 1U),
+                       {{127U, 0U, 0U, 1U}, 30509U}, 30U, 0U));
+  REQUIRE(server.Offer(ServiceInstance::New(0x2222U, 0x0001U, 1U),
+                       {{127U, 0U, 0U, 1U}, 30510U}, 30U, 0U));
+  const std::uint32_t after_announcements = capture.count;
+
+  std::uint8_t find[64] = {};
+  const auto find_size =
+      BuildFindServiceDatagram(osp::make_span(find), 0xFFFFU, SdSessionCounter::New().Next());
+  REQUIRE(find_size.has_value());
+  server.HandleDatagram(osp::make_span(find, find_size.value()),
+                        {{127U, 0U, 0U, 2U}, 30490U}, 10U);
+
+  REQUIRE((after_announcements + 2U) == capture.count);
+  std::uint32_t matched = 0U;
+  for (std::uint32_t index = after_announcements; index < capture.count; ++index) {
+    const auto reply = MessageView::Parse(
+        osp::make_span(capture.items[index].bytes, capture.items[index].size));
+    REQUIRE(reply.has_value());
+    auto sd = reply.value().SdHeader();
+    REQUIRE(sd.has_value());
+    EntryView entry;
+    REQUIRE(sd.value().NextEntry(entry));
+    if (0x1111U == entry.ServiceId() || 0x2222U == entry.ServiceId()) {
+      ++matched;
+    }
+  }
+  REQUIRE(2U == matched);
+}
