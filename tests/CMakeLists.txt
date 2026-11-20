@@ -33,6 +33,7 @@ add_executable(someip_tests
     test_return_code.cpp
     test_header.cpp
     test_message.cpp
+    test_tp.cpp
     test_wire_golden.cpp
     test_sd_entry.cpp
     test_sd_options.cpp
@@ -41,8 +42,10 @@ add_executable(someip_tests
     test_server.cpp
     test_client.cpp
     test_udp_loopback.cpp
+    test_multicast.cpp
     test_client_server_loopback.cpp
     test_e2e.cpp
+    test_e2e_profile1.cpp
     test_sd_fuzz.cpp
     test_owned_payload.cpp
 )
@@ -52,4 +55,12 @@ if(SOMEIP_NO_EXCEPTIONS)
     target_compile_options(someip_tests PRIVATE -fno-exceptions -fno-rtti)
 endif()
 
-catch_discover_tests(someip_tests)
+# Catch2 exits with 4 when a case is skipped; CTest must not read that as a
+# failure. SOMEIP_TEST_MCAST_IFACE is forwarded to the cases that look for it,
+# so host runs can exercise multicast without exporting it in the shell.
+set(_someip_test_properties PROPERTIES SKIP_RETURN_CODE 4)
+if(SOMEIP_TEST_MCAST_IFACE)
+    list(APPEND _someip_test_properties
+        ENVIRONMENT "SOMEIP_TEST_MCAST_IFACE=${SOMEIP_TEST_MCAST_IFACE}")
+endif()
+catch_discover_tests(someip_tests ${_someip_test_properties})

@@ -52,6 +52,8 @@ enum class ErrorCode : std::uint8_t {
   kNotSdMessage,
   /// Payload type does not serve the requested message ID.
   kUnsupportedMessageId,
+  /// SOME/IP-TP header or segment offset is not usable.
+  kInvalidTpSegment,
 };
 
 /// @brief Value-type error returned by every codec entry point.
@@ -132,6 +134,10 @@ struct Error final {
 
   static constexpr Error NotSdMessage() noexcept {
     return Error{ErrorCode::kNotSdMessage, 0U, 0U};
+  }
+
+  static constexpr Error InvalidTpSegment(std::uint32_t word) noexcept {
+    return Error{ErrorCode::kInvalidTpSegment, word, 0U};
   }
 };
 

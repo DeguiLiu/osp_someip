@@ -23,6 +23,7 @@
 #include "osp/someip/sd/session.hpp"
 #include "osp/someip/sd_codec.hpp"
 #include "osp/someip/service_instance.hpp"
+#include "osp/someip/tp.hpp"
 #include "osp/span.hpp"
 #include "osp/vocabulary.hpp"
 
@@ -79,7 +80,7 @@ struct NoServiceObserver final {
 template <typename Sink, std::uint32_t MaxOffers = 8U, std::uint32_t MaxSubscribers = 16U,
           std::uint32_t MaxDatagram = 1400U, typename RequestHandler = NoRequestHandler,
           typename E2E = NoE2E, typename Observer = NoServiceObserver,
-          std::uint32_t MaxRemoteServices = 8U>
+          std::uint32_t MaxRemoteServices = 8U, typename Tp = NoTpReassembly>
 class Server final {
  public:
   /// @brief @p sink must outlive the server and must not store the byte view.
@@ -97,6 +98,9 @@ class Server final {
 
   /// @brief Mutable access to the remote-service observer.
   Observer& ObserverHandler() noexcept { return observer_; }
+
+  /// @brief Mutable access to the TP reassembler.
+  Tp& TpHandler() noexcept { return tp_; }
 
   /// @brief Start offering a service and announce it once.
   bool Offer(const ServiceInstance& service, const Ipv4Endpoint& endpoint,
@@ -130,6 +134,7 @@ class Server final {
 
   /// @brief Expire subscriptions and re-announce offers at half their TTL.
   void Tick(std::uint32_t now_ms) noexcept {
+    tp_.Tick(now_ms);
     for (auto& slot : remotes_) {
       if (slot.active && now_ms >= slot.expires_ms) {
         slot.active = false;
@@ -160,14 +165,22 @@ class Server final {
     if (!message.has_value()) {
       return;
     }
-    if (!message.value().IsSd()) {
-      const MessageType type = message.value().Head().Type().Type();
+    MessageView full = message.value();
+    if (full.Head().Type().IsTp()) {
+      MessageView done;
+      if (!tp_.Feed(full, now_ms, done)) {
+        return;
+      }
+      full = done;
+    }
+    if (!full.IsSd()) {
+      const MessageType type = full.Head().Type().Type();
       if (MessageType::kRequest == type || MessageType::kRequestNoReturn == type) {
-        HandleRequest(message.value(), source);
+        HandleRequest(full, source);
       }
       return;
     }
-    auto sd_header = message.value().SdHeader();
+    auto sd_header = full.SdHeader();
     if (!sd_header.has_value()) {
       return;
     }
@@ -382,17 +395,39 @@ class Server final {
 
   void SendReply(const HeaderView& request, const RequestReply& reply,
                  const Ipv4Endpoint& to) noexcept {
+    const std::size_t capacity =
+        sizeof(buffer_) - static_cast<std::size_t>(kHeaderSize);
+    if (reply.payload.size() > capacity) {
+      return;
+    }
+    for (std::size_t index = 0U; index < reply.payload.size(); ++index) {
+      buffer_[static_cast<std::size_t>(kHeaderSize) + index] = reply.payload[index];
+    }
+    const MessageType type =
+        reply.is_error ? MessageType::kError : MessageType::kResponse;
+    const Header provisional = Header::New(
+        request.Id(), request.RequestId(), request.ProtocolVersion(),
+        request.InterfaceVersion(), MessageTypeField::New(type, false), reply.code,
+        static_cast<std::uint32_t>(reply.payload.size()));
+    const auto protected_body = e2e_.Protect(
+        request.Id(), provisional.UpperHeaderBytes(),
+        osp::make_span(buffer_ + static_cast<std::size_t>(kHeaderSize), capacity),
+        static_cast<std::uint32_t>(reply.payload.size()));
+    if (protected_body.data() != buffer_ + static_cast<std::size_t>(kHeaderSize)) {
+      return;
+    }
     const Header header = Header::New(
         request.Id(), request.RequestId(), request.ProtocolVersion(),
-        request.InterfaceVersion(),
-        MessageTypeField::New(
-            reply.is_error ? MessageType::kError : MessageType::kResponse, false),
-        reply.code, static_cast<std::uint32_t>(reply.payload.size()));
-    const Message<OpaquePayload> message(header, OpaquePayload(reply.payload));
-    const auto written = message.EncodeTo(osp::make_span(buffer_));
-    if (written.has_value()) {
-      sink_(osp::span<const std::uint8_t>(buffer_, written.value()), to);
+        request.InterfaceVersion(), MessageTypeField::New(type, false), reply.code,
+        static_cast<std::uint32_t>(protected_body.size()));
+    const auto written =
+        header.EncodeTo(osp::make_span(buffer_, static_cast<std::size_t>(kHeaderSize)));
+    if (!written.has_value()) {
+      return;
     }
+    sink_(osp::span<const std::uint8_t>(
+              buffer_, static_cast<std::size_t>(kHeaderSize) + protected_body.size()),
+          to);
   }
 
   void HandleSd(sd::SdHeaderView& sd_header, const Ipv4Endpoint& source,
@@ -563,6 +598,7 @@ class Server final {
   RemoteSlot remotes_[MaxRemoteServices]{};
   sd::SdSessionCounter session_ = sd::SdSessionCounter::New();
   std::uint8_t buffer_[MaxDatagram]{};
+  Tp tp_{};
 };
 
 }  // namespace osp::someip

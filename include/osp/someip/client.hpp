@@ -21,6 +21,7 @@
 #include "osp/someip/sd/session.hpp"
 #include "osp/someip/sd_codec.hpp"
 #include "osp/someip/service_instance.hpp"
+#include "osp/someip/tp.hpp"
 #include "osp/span.hpp"
 
 #include <cstddef>
@@ -46,7 +47,7 @@ namespace osp::someip {
 template <typename Sink, typename Handler, std::uint32_t MaxServices = 16U,
           std::uint32_t MaxPending = 4U, std::uint32_t MaxDatagram = 1400U,
           typename E2E = NoE2E, std::uint32_t MaxSubscriptions = 8U,
-          std::uint32_t MaxPeers = 8U>
+          std::uint32_t MaxPeers = 8U, typename Tp = NoTpReassembly>
 class Client final {
  public:
   static constexpr std::uint32_t kFindRepetitions = 3U;
@@ -75,6 +76,9 @@ class Client final {
   /// @brief Mutable access to the E2E policy (tests inspect its counters).
   E2E& E2EHandler() noexcept { return e2e_; }
 
+  /// @brief Mutable access to the TP reassembler.
+  Tp& TpHandler() noexcept { return tp_; }
+
   /// @brief Send a FindService now and repeat it at doubling intervals.
   bool StartFind(std::uint16_t service_id, std::uint32_t now_ms) noexcept {
     FindSlot* slot = FreeFindSlot(service_id);
@@ -95,6 +99,7 @@ class Client final {
 
   /// @brief Repeat due finds and report timed-out requests.
   void Tick(std::uint32_t now_ms) noexcept {
+    tp_.Tick(now_ms);
     for (auto& slot : services_) {
       if (slot.active && now_ms >= slot.expires_ms) {
         slot.active = false;
@@ -140,16 +145,24 @@ class Client final {
     if (!message.has_value()) {
       return;
     }
-    if (message.value().IsSd()) {
-      HandleSd(message.value(), source, now_ms);
+    MessageView full = message.value();
+    if (full.Head().Type().IsTp()) {
+      MessageView done;
+      if (!tp_.Feed(full, now_ms, done)) {
+        return;
+      }
+      full = done;
+    }
+    if (full.IsSd()) {
+      HandleSd(full, source, now_ms);
       return;
     }
-    const HeaderView head = message.value().Head();
-    const E2ECheck check = e2e_.Check(head.Id(), head.UpperHeaderBytes(), message.value().Body());
+    const HeaderView head = full.Head();
+    const E2ECheck check = e2e_.Check(head.Id(), head.UpperHeaderBytes(), full.Body());
     if (check.applies && !check.ok) {
       return;
     }
-    const MessageView body_view = message.value().WithBody(check.payload);
+    const MessageView body_view = full.WithBody(check.payload);
     const MessageType type = head.Type().Type();
     if (MessageType::kNotification == type) {
       handler_.OnEvent(body_view);
@@ -531,6 +544,7 @@ class Client final {
   sd::SdSessionCounter session_ = sd::SdSessionCounter::New();
   std::uint16_t session_id_{0U};
   std::uint8_t buffer_[MaxDatagram]{};
+  Tp tp_{};
 };
 
 }  // namespace osp::someip

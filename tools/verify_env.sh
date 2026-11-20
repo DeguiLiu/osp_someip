@@ -43,6 +43,19 @@ if ip link show lo 2>/dev/null | grep -q MULTICAST; then
 else
     printf '%-42s %s\n' "loopback multicast" "off (sudo ip link set lo multicast on)"
 fi
+mcast_iface=$(ip -o link show 2>/dev/null | awk '$0 ~ /MULTICAST/ && $2 != "lo:" {print $2}' |
+    tr -d ':' | while read -r dev; do
+        addr=$(ip -o -4 addr show dev "$dev" 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
+        if [ -n "$addr" ]; then
+            printf '%s %s\n' "$dev" "$addr"
+            break
+        fi
+    done)
+if [ -n "$mcast_iface" ]; then
+    printf '%-42s %s\n' "multicast test interface" "${mcast_iface#* } (${mcast_iface%% *})"
+else
+    printf '%-42s %s\n' "multicast test interface" "none (set SOMEIP_TEST_MCAST_IFACE yourself)"
+fi
 
 echo
 echo "vsomeip interop lane"
@@ -70,6 +83,14 @@ echo
 echo "target lanes"
 check_optional "arm-linux-gnueabihf-g++" arm-linux-gnueabihf-g++ --version
 check_optional "aarch64-linux-gnu-g++" aarch64-linux-gnu-g++ --version
+check_optional "qemu-aarch64" qemu-aarch64 --version
+if [ -n "${AARCH64_TOOLCHAIN_ROOT:-}" ] &&
+    [ -x "${AARCH64_TOOLCHAIN_ROOT}/usr/bin/aarch64-linux-gnu-g++-11" ]; then
+    printf '%-42s %s\n' "AARCH64_TOOLCHAIN_ROOT" "${AARCH64_TOOLCHAIN_ROOT}"
+else
+    printf '%-42s %s\n' "AARCH64_TOOLCHAIN_ROOT" \
+        "unset or incomplete (see docs/validation_lanes_zh.md)"
+fi
 
 echo
 if [ "${missing_required}" -ne 0 ]; then

@@ -8,6 +8,7 @@
 
 #include "osp/someip/client.hpp"
 #include "osp/someip/e2e.hpp"
+#include "osp/someip/e2e_profile1.hpp"
 #include "osp/someip/error.hpp"
 #include "osp/someip/endpoint.hpp"
 #include "osp/someip/header.hpp"
@@ -27,6 +28,7 @@
 #include "osp/someip/sd_codec.hpp"
 #include "osp/someip/server.hpp"
 #include "osp/someip/service_instance.hpp"
+#include "osp/someip/tp.hpp"
 #include "osp/someip/udp_link.hpp"
 #include "osp/someip/wire.hpp"
 

@@ -74,6 +74,35 @@ inline bool JoinSdMulticast(osp::UdpSocket& socket,
 #endif
 }
 
+/// @brief Select the outgoing interface for SD multicast sends.
+inline bool SetSdMulticastInterface(
+    osp::UdpSocket& socket,
+    const std::array<std::uint8_t, 4>& interface_address) noexcept {
+#if defined(IP_MULTICAST_IF)
+  in_addr request{};
+  std::memcpy(&request, interface_address.data(), interface_address.size());
+  return 0 == osp::socket_api::SetSockOpt(socket.Fd(), IPPROTO_IP, IP_MULTICAST_IF,
+                                          &request, static_cast<socklen_t>(sizeof(request)));
+#else
+  (void)socket;
+  (void)interface_address;
+  return false;
+#endif
+}
+
+/// @brief Enable or disable loopback of this socket's own multicast datagrams.
+inline bool SetSdMulticastLoop(osp::UdpSocket& socket, bool enable) noexcept {
+#if defined(IP_MULTICAST_LOOP)
+  const std::uint8_t request = enable ? 1U : 0U;
+  return 0 == osp::socket_api::SetSockOpt(socket.Fd(), IPPROTO_IP, IP_MULTICAST_LOOP,
+                                          &request, static_cast<socklen_t>(sizeof(request)));
+#else
+  (void)socket;
+  (void)enable;
+  return false;
+#endif
+}
+
 }  // namespace osp::someip
 
 #endif  // OSP_SOMEIP_UDP_LINK_HPP_
