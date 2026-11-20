@@ -24,6 +24,16 @@ setarch $(uname -m) -R env ASAN_OPTIONS=detect_leaks=1 ./build-asan/tests/someip
 验收：119 个用例 / 12716 条断言全过；sanitizer 无报告；零分配进程返回 0；
 `someip_headers_self_contained` 把 26 个公开头文件逐个单独编译，全部通过。
 
+CI 同路径（干净目录、拉取上游 newosp 而不是用同级目录）也跑过一遍：
+
+```bash
+OSP_GITHUB_MIRROR=https://ghfast.top/ cmake -S . -B /tmp/fetch-check \
+    -DSOMEIP_FETCH_NEWOSP=ON -DOSP_INCLUDE_DIR=/nonexistent
+cmake --build /tmp/fetch-check -j8 && ctest --test-dir /tmp/fetch-check
+```
+
+结果 121 项全过。这条路径验证的是 `FetchContent` 拉下来的 newosp main 与本地同级目录等价。
+
 跨实现互通（已验证，双向）：
 
 ```bash
