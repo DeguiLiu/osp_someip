@@ -350,8 +350,24 @@ tools/rtthread_qemu.sh "$PWD/rt-thread"
 镜像体积：加入 osp-someip 与 C++ 运行支持后，`rtthread.elf` 的 text 从 556,259 字节增至
 615,135 字节（+58,876），这是 C++ 运行库与 15 项自检代码的总量。
 
+### 5.2 lwIP 运行时（未完成）
+
+尝试在同一个 qemu-vexpress-a9 上打开 lwIP 并跑真实 UDP，但没有走通，记录如下以免重复踩坑：
+
+- BSP 默认关闭全部网络：`.config` 里 `RT_USING_SAL`、`RT_USING_LWIP`、`RT_USING_NETDEV`、
+  `BSP_DRV_EMAC` 都是未启用。
+- 手工逐项打开后需要：`RT_LWIP_UDP`、`RT_LWIP_TCP`（lwIP 的 `api_lib.c` 在 TCP 关闭时无法编译）、
+  `RT_LWIP_IPV4`、`RT_LWIP_DHCP`、`RT_LWIP_DNS`（SAL 引用 `lwip_getaddrinfo`）、
+  `RT_USING_LWIP_IPV6`（netdev 头文件无条件使用 `ip6_addr_t`），最后还要求 `NETDEV_IPV6`。
+- 卡在 RT-Thread 5.4 的 `netdev.h`：它写的是 `#if NETDEV_IPV6`，而 Kconfig 布尔开关生成的是空宏
+  `#define NETDEV_IPV6`，预处理器直接报 `#if with no expression`。
+
+结论：这条路径应当用 `scons --menuconfig` 正常生成配置（或改用 lwIP raw socket 绕过 netdev/SAL），
+而不是手工改 `.config`。当前仓库只保留不依赖网络的 5.1 运行时自检。
+
 仍**不能**证明：
 
+- lwIP 收发的运行时行为；
 - 真实板卡上的收发、定时与中断上下文行为；
 - 栈与中断占用，以及 lwIP 与 RT-Thread 的具体版本组合。
 
