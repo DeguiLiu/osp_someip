@@ -145,6 +145,9 @@ qemu-aarch64 -L "$AARCH64_TOOLCHAIN_ROOT/usr/aarch64-linux-gnu" \
 观察结果：客户端 `available` → `subscribe ack ttl=10` → `response 0x00010001` → 每秒一条
 `event 0x8001`；服务端 `1 subscriber(s)`。
 
+同一工具链再加 `-DSOMEIP_NO_EXCEPTIONS=ON` 再跑一遍：119 项全过，组播 1 项跳过，
+说明无异常、无 RTTI 的目标配置在 aarch64 上同样成立。
+
 真实板卡仍未验证：需要一块 aarch64 板子，把上面的命令换成板卡 IP 与 `tools/sd_probe.py`。
 
 ## 5. 通道状态总表
