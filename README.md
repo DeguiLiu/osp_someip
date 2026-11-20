@@ -103,7 +103,10 @@ newosp 头文件默认取 `../newosp/include`，可用 `-DOSP_INCLUDE_DIR=<path>
 
 详见 [docs/design_zh.md](docs/design_zh.md)，参考实现清单见
 [docs/reference_projects_zh.md](docs/reference_projects_zh.md)，与 Rust 原型的对照见
-[docs/comparison_with_rust_zh.md](docs/comparison_with_rust_zh.md)。
+[docs/comparison_with_rust_zh.md](docs/comparison_with_rust_zh.md)，验证通道与环境前置见
+[docs/validation_lanes_zh.md](docs/validation_lanes_zh.md)。
+
+环境自检：`./tools/verify_env.sh`。
 
 ## 路线图
 

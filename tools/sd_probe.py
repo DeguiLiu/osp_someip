@@ -10,6 +10,7 @@ Usage:
 """
 
 import argparse
+import select
 import socket
 import struct
 import time
@@ -19,6 +20,7 @@ SD_PORT = 30490
 
 def parse_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=("client", "server"), default="client")
     parser.add_argument("--server", default="127.0.0.1")
     parser.add_argument("--local", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=30510)
@@ -119,8 +121,7 @@ def parse_options(options):
     return parsed
 
 
-def main():
-    args = parse_args()
+def run_client(args):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind(("0.0.0.0", args.port))
@@ -189,6 +190,112 @@ def main():
             )
 
     print("done")
+
+
+def offer_datagram(args, request_id):
+    entry = struct.pack(
+        ">BBBBHHB3sI",
+        0x01,
+        0,
+        0,
+        0x10,
+        args.service,
+        args.instance,
+        args.major,
+        args.ttl.to_bytes(3, "big"),
+        0,
+    )
+    return sd_message([entry], ipv4_option("127.0.0.1", 30509), request_id)
+
+
+def ack_datagram(args, request_id):
+    entry = struct.pack(
+        ">BBBBHHB3sHH",
+        0x07,
+        0,
+        0,
+        0x00,
+        args.service,
+        args.instance,
+        args.major,
+        args.ttl.to_bytes(3, "big"),
+        0,
+        args.eventgroup,
+    )
+    return sd_message([entry], b"", request_id)
+
+
+def run_server(args):
+    """Answer find/subscribe/request and publish an event every second."""
+    sd_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sd_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sd_sock.bind(("0.0.0.0", SD_PORT))
+    service_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    service_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    service_sock.bind(("0.0.0.0", 30509))
+
+    subscribers = set()
+    session = [0]
+
+    def next_session():
+        session[0] = (session[0] % 0xFFFF) + 1
+        return session[0]
+
+    deadline = time.monotonic() + args.seconds
+    last_publish = 0.0
+    counter = 0
+    while time.monotonic() < deadline:
+        readable, _, _ = select.select([sd_sock, service_sock], [], [], 0.05)
+        for sock in readable:
+            datagram, source = sock.recvfrom(2048)
+            if len(datagram) < 16:
+                continue
+            message_id, length, request_id, _, _, message_type, _ = struct.unpack(
+                ">IIIBBBB", datagram[:16]
+            )
+            if message_id == 0xFFFF8100:
+                _, entries, options = parse_sd(datagram)
+                for entry in entries:
+                    if entry[0] == 0x00:
+                        sd_sock.sendto(offer_datagram(args, next_session()), source)
+                        print(f"find from {source} -> offer sent")
+                    elif entry[0] == 0x06:
+                        endpoints = parse_options(options)
+                        endpoint = (
+                            (endpoints[0][1], endpoints[0][2]) if endpoints else source
+                        )
+                        subscribers.add(endpoint)
+                        sd_sock.sendto(ack_datagram(args, next_session()), source)
+                        print(f"subscribe from {source} -> ack to {endpoint}")
+            elif message_type == 0x00:
+                body = datagram[16 : 16 + max(0, length - 8)]
+                response = (
+                    someip_header(message_id, 8 + len(body), request_id, 0x80, 0x00) + body
+                )
+                service_sock.sendto(response, source)
+                print(f"request 0x{message_id & 0xFFFF:04X} -> {len(body)} bytes echoed")
+
+        now = time.monotonic()
+        if subscribers and (now - last_publish) >= 1.0:
+            last_publish = now
+            counter += 1
+            payload = struct.pack(">I", counter)
+            header = someip_header(
+                (args.service << 16) | 0x8001, 8 + len(payload), next_session(), 0x02, 0x00
+            )
+            for endpoint in list(subscribers):
+                service_sock.sendto(header + payload, endpoint)
+            print(f"event {counter} -> {len(subscribers)} subscriber(s)")
+
+    print("done")
+
+
+def main():
+    args = parse_args()
+    if "server" == args.mode:
+        run_server(args)
+    else:
+        run_client(args)
 
 
 if __name__ == "__main__":
