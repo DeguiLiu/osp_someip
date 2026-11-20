@@ -24,6 +24,11 @@ setarch $(uname -m) -R env ASAN_OPTIONS=detect_leaks=1 ./build-asan/tests/someip
 验收：132 个用例 / 12912 条断言全过；sanitizer 无报告；零分配进程返回 0；
 `someip_headers_self_contained` 把 26 个公开头文件逐个单独编译，全部通过。
 
+E2E Profile 4 的 CRC 另外做过一次交叉核对：用临时程序把 vsomeip 的 `crc.cpp` 与
+`profile_04.cpp` 编进同一个进程，对 1000 组随机缓冲比较
+`profile_04::compute_crc` 与 `Crc32Autosar` 的结果，差异为 0。该程序没有入库，也不作
+测试 oracle；仓库里的期望值仍然只用标准目录的校验值 `0x1697D06A`。
+
 覆盖率只作趋势参考，不作为门禁：
 
 ```bash
