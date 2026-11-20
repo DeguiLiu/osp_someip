@@ -1,54 +1,29 @@
 # osp-someip
 
-面向嵌入式 Linux 与 RT-Thread 的 SOME/IP 协议栈，C++17 头文件库，基于 newosp 框架。
-当前完成 M0–M3 核心：SOME/IP 线格式、消息遍历、Service Discovery 编解码与零拷贝解析、
-数据报构建器、不依赖 socket 的服务端（offer 重播、订阅管理、事件发布）与客户端
-（发现缓存、find 重发、请求匹配、超时与事件分发）。
+[English](README.en.md) | 中文
 
-## 结论先行
+SOME/IP 协议栈，C++17 头文件库，面向嵌入式 Linux 与 RT-Thread，运行底座是
+[newosp](https://github.com/DeguiLiu/newosp)。包含线格式、Service Discovery、服务端和客户端，
+不包含 socket 与线程：收发和时钟由调用方注入，可以接进已有的事件循环或 RTOS 任务。
 
-| 项 | 状态 |
-|---|---|
-| 语言与标准 | C++17，`-fno-exceptions -fno-rtti` 可构建 |
-| 内存 | 零堆分配，定容视图与调用方缓冲区 |
-| 多态 | CRTP 静态多态，无 vtable、无工厂、无动态池 |
-| 线格式 | Header / Message / Opaque payload 已实现（M0） |
-| 载荷 | `OpaquePayload`（借用视图）与 `OwnedPayload<Capacity>`（定容持有） |
-| Service Discovery | entry / option / header 编解码、数据报构建器、零拷贝解析（M1） |
-| 服务端 | offer/stop-offer、find 应答、订阅槽表、事件发布、TTL 重播、远端 offer 观察者（M2） |
-| RPC 服务侧 | `RequestHandler` 钩子：同步分发 Request、自动回 Response/Error、支持 fire-and-forget |
-| 客户端 | 发现缓存、find 重发、请求匹配、订阅续订、超时、可用性回调、对端重启检测（M3） |
-| 网络接入 | 单播收发、`SO_REUSEADDR`、SD 组播加入（`JoinSdMulticast`） |
-| E2E 钩子 | `E2E` 策略模板：发送前 Protect、接收时 Check，失败丢弃；默认 `NoE2E` 零开销 |
-| 零堆 | 全局 `operator new` 计数见证进程，完整场景 0 次分配 |
-| Sanitizer | ASan + UBSan 全量通过 |
-| 静态分析 | cpplint 0 条；clang-tidy bugprone/performance 仅剩已记录偏差 |
-| 性能基线 | 回环 3000 RTT：p50 5 µs、p99 9–12 µs、约 16 万 req/s（x86 Release） |
-| 测试 | 102 个用例、3710 条断言（含确定式变异扫描）；普通构建与无异常构建均通过 |
+目前完成 M0–M3。目标板数据和第三方互操作尚未执行，见“状态与限制”。
 
-## 目录结构
+## 能力
 
-```text
-include/osp/someip/
-  header.hpp          SOME/IP 16 字节头（值类型 + 零拷贝视图）
-  message.hpp         完整消息、解码视图、数据报遍历器
-  payload.hpp         载荷编解码骨架与不透明载荷
-  wire.hpp            定界大端写入器与编码器 CRTP 骨架
-  error.hpp           值类型错误码
-  message_id.hpp      服务 ID / 方法 ID
-  message_type.hpp    消息类型与 TP 标志
-  return_code.hpp     返回码（命名码、通用区间、接口区间）
-  sd/                 SD 类型、entry/option 编解码与视图、header、会话计数
-  sd_codec.hpp        Offer / StopOffer / Subscribe / Ack 数据报构建器
-  server.hpp          服务端：offer 槽表、订阅槽表、事件发布（模板容量）
-  client.hpp          客户端：发现缓存、find 重发、请求匹配、超时
-  endpoint.hpp        IPv4 端点与 SD 组播默认值
-  service_instance.hpp 服务标识（service / instance / major）
-tests/                Catch2 测试，含手工推导的线格式 golden
-docs/                 设计文档与参考实现清单
-```
+- 线格式：16 字节 SOMF 头、消息编解码、数据报遍历。SOME/IP-TP 分段跳过并计数，不做重组。
+- Service Discovery：entry / option / header 编解码与零拷贝视图；Find、Offer、StopOffer、
+  Subscribe、Ack 数据报构建；会话计数。
+- 服务端：offer 槽表、find 应答（支持通配）、订阅管理、事件发布、TTL 到期与 TTL/2 重播、
+  远端 offer 观察者。
+- 客户端：发现缓存、find 倍增重发、请求匹配与超时、订阅半 TTL 续订、服务可用性回调、
+  对端重启检测。
+- RPC：`RequestHandler` 在编译期绑定，同步分发请求，自动回 Response 或 Error，支持
+  fire-and-forget。
+- E2E：策略模板，发送前 Protect、接收时 Check，校验失败丢弃；默认 `NoE2E`，不产生开销。
+- 内存：容器容量由模板参数给定，解析结果是调用方缓冲区上的视图，全链路不分配堆内存。
+- 构建：`-fno-exceptions -fno-rtti` 下可用。
 
-## 构建与测试
+## 快速开始
 
 ```bash
 cmake -S . -B build -DOSP_GITHUB_MIRROR=https://ghfast.top/
@@ -56,15 +31,50 @@ cmake --build build -j8
 ctest --test-dir build --output-on-failure
 ```
 
-无异常、无 RTTI 构建：
+也可以用预设：`host-debug`、`host-release`、`noexc`、`asan`、`demo`。
 
 ```bash
-cmake -S . -B build-noexc -DSOMEIP_NO_EXCEPTIONS=ON
-cmake --build build-noexc -j8
-ctest --test-dir build-noexc --output-on-failure
+cmake --preset host-debug
+cmake --build --preset host-debug -j8
+ctest --preset host-debug
 ```
 
-可运行的服务端与客户端示例（服务端绑定 SD 30490 与服务 30509、加入组播、回显请求并每秒发布；
+主机上 102 个用例、3710 条断言通过；`noexc` 与 ASan + UBSan 两组构建另行跑通。
+x86 回环 3000 次 RPC 往返，p50 5 µs、p99 9–12 µs，约 16 万次请求/秒，
+数据来自 `docs/benchmark_report_zh.md`，不代表目标板。
+
+## 接入方式
+
+服务端把发送通道作为模板参数，请求处理函数在编译期绑定：
+
+```cpp
+#include "osp/someip/server.hpp"
+
+struct UdpSink {
+  void operator()(osp::span<const std::uint8_t> datagram,
+                  const osp::someip::Ipv4Endpoint& to) noexcept {
+    // sendto(to.address, to.port, datagram)
+  }
+};
+
+struct Echo {
+  osp::someip::RequestReply OnRequest(const osp::someip::IncomingRequest& request) noexcept {
+    return osp::someip::RequestReply{true, false, osp::someip::ReturnCode::Ok(), request.payload};
+  }
+};
+
+UdpSink sink;
+osp::someip::Server<UdpSink, 8U, 16U, 1400U, Echo> server(sink);
+
+server.Offer(service, local_endpoint, 3U, now_ms);   // 开始 offer
+server.HandleDatagram(datagram, source, now_ms);     // 收到一个数据报
+server.Tick(now_ms);                                 // 推进重播、超时
+```
+
+客户端用法对称，构造时传入发送通道和回调，`Tick()` 负责 find 重发、请求超时与订阅续订。
+`HandleDatagram()` 不保存传入视图，回调返回后数据即可复用。
+
+可运行的示例（服务端绑定 SD 30490 与服务端口，加入组播，回显请求并每秒发布一条事件；
 客户端发现、订阅、发一次 RPC、收事件）：
 
 ```bash
@@ -75,31 +85,24 @@ cmake --build build-demo -j8
     --port 30510 --service 1234 --method 0001 --seconds 4
 ```
 
-实测输出：客户端发现 `0x1234/0x0001`、订阅 Ack（TTL=10）、收到 RPC 响应
-`0x00010001`（4 字节回显）、每秒收到一条 4 字节事件；服务端显示请求日志与
-`1 subscriber(s)`。
-
-独立探针（第二套实现，仅用 Python 标准库收发原始报文）：
+`tools/sd_probe.py` 是只用 Python 标准库的第二套实现，可以当服务端或客户端，用来核对字节级别
+的编解码是否一致：
 
 ```bash
 python3 tools/sd_probe.py --server 127.0.0.1 --service 1234 --method 0001
+python3 tools/sd_probe.py --mode server --service 1234 --seconds 6
 ```
 
-实测：`offer ... endpoint=('127.0.0.1', 30509)`、`subscribe ack granted ttl=10`、
-`response ... payload=11223344`，并连续收到 `event method=0x8001`。这条链路证明 C++ 编解码
-与一份独立实现的字节构造完全一致。
+## 构建选项
 
-newosp 头文件默认取 `../newosp/include`，可用 `-DOSP_INCLUDE_DIR=<path>` 覆盖。
-没有同级 newosp 时加 `-DSOMEIP_FETCH_NEWOSP=ON`，构建会从 GitHub 拉取。
-
-预设（CMakePresets.json）：`host-debug`、`host-release`、`noexc`、`asan`、`demo`。
-
-```bash
-cmake --preset host-debug && cmake --build --preset host-debug -j8
-ctest --preset host-debug
-```
-
-CI 模板见 `.github/workflows/ci.yml`（主机三档 + sanitizer + 示例/基准 + cpplint）。
+| 选项 | 默认 | 说明 |
+|---|---|---|
+| `OSP_INCLUDE_DIR` | `../newosp/include` | newosp 头文件目录 |
+| `SOMEIP_FETCH_NEWOSP` | OFF | 同级目录没有 newosp 时从 GitHub 拉取 |
+| `SOMEIP_BUILD_TESTS` | ON | 编译 Catch2 测试 |
+| `SOMEIP_BUILD_EXAMPLES` | OFF | 编译示例与基准 |
+| `SOMEIP_NO_EXCEPTIONS` | OFF | 加 `-fno-exceptions -fno-rtti` |
+| `OSP_GITHUB_MIRROR` | 空 | 拉取依赖时的镜像前缀 |
 
 安装与消费：
 
@@ -108,48 +111,51 @@ cmake -S . -B build -DSOMEIP_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/opt/osp-som
 cmake --build build -j8 && cmake --install build
 ```
 
-消费端：
-
 ```cmake
 find_package(osp_someip CONFIG REQUIRED)
 target_link_libraries(app PRIVATE osp::osp_someip)
 ```
 
-newosp 头文件不随本包安装：消费端自行把它加入 include 路径，或在 `find_package` 前
-设置 `OSP_INCLUDE_DIR`。已验证：安装到 `/tmp` 前缀后，独立工程 `find_package` →
-链接 → 运行（生成 56 字节 offer 报文）。
+newosp 头文件不随本包安装，消费端需要自己提供 include 路径，或在 `find_package` 前设置
+`OSP_INCLUDE_DIR`。
 
-## 设计要点
+## 目录
 
-1. 编码器是 CRTP 骨架：派生类实现 `DoEncodedSize()` 与 `DoEncodeTo(osp::span<uint8_t>)`，
-   基类只提供唯一的边界检查入口，因此不存在第二套长度校验。
-2. 解码返回 `osp::expected<T, Error>`，错误是值类型，不抛异常、不带字符串、不分配。
-3. `HeaderView` / `MessageView` 是 caller-owned 缓冲上的视图，解析零拷贝；`Header` / `Message<P>`
-   是可编码的值类型，长度字段在构造时由载荷长度推出。
-4. 数据报遍历器跳过 SOME/IP-TP 分段并计数，遇到畸形消息时把剩余字节原样交出。
-5. 服务端把发送通道作为模板参数注入（`Server<Sink, ...>`），编解码与发送都在编译期绑定，
-   没有 `std::function`、没有 vtable、没有堆；`tests/no_alloc_witness.cpp` 用全局
-   `operator new` 计数守护这一点。
-
-详见 [docs/design_zh.md](docs/design_zh.md)，参考实现清单见
-[docs/reference_projects_zh.md](docs/reference_projects_zh.md)，与 Rust 原型的对照见
-[docs/comparison_with_rust_zh.md](docs/comparison_with_rust_zh.md)，验证通道与环境前置见
-[docs/validation_lanes_zh.md](docs/validation_lanes_zh.md)，性能基线见
-[docs/benchmark_report_zh.md](docs/benchmark_report_zh.md)，静态分析结论见
-[docs/static_analysis_zh.md](docs/static_analysis_zh.md)。
-
-环境自检：`./tools/verify_env.sh`。
-
-## 路线图
-
-```mermaid
-flowchart LR
-  M0["M0 线格式<br/>header/message/golden"] --> M1["M1 SD 编解码<br/>entry/option/datagram"]
-  M1 --> M2["M2 服务端<br/>offer/event/subscribe"]
-  M2 --> M3["M3 客户端<br/>find/subscribe/rpc"]
-  M3 --> M4["M4 目标验证<br/>ARM 与互操作"]
+```text
+include/osp/someip/
+  header.hpp       SOMF 头，值类型与视图
+  message.hpp      消息编解码、数据报遍历
+  payload.hpp      载荷骨架、OpaquePayload
+  owned_payload.hpp  定容持有载荷
+  wire.hpp         大端写入器与编码器 CRTP 骨架
+  sd/              SD 类型、entry、option、header、会话计数
+  sd_codec.hpp     SD 数据报构建器
+  server.hpp       服务端
+  client.hpp       客户端
+  udp_link.hpp     newosp UDP 套接字适配
+  e2e.hpp          E2E 策略钩子
+examples/          服务端、客户端、回环基准
+tests/             Catch2 测试，含手写线格式 golden
+docs/              设计、验证、基准、静态分析文档
 ```
 
-## 许可证
+## 状态与限制
 
-待定。参考实现仅作行为与规范对照，不复制其代码，详见参考实现清单。
+- 未做 ARM 交叉构建与目标板实测，现有性能数据全部来自 x86 主机回环。
+- 未做 vsomeip 互操作。操作步骤写在 `docs/validation_lanes_zh.md`，需要 Docker 环境。
+- 组播加入已实现并有示例，真实网卡与 IGMP 环境下尚未验证。
+- SOME/IP-TP 只跳过不重组；E2E 只有钩子，没有内置 AUTOSAR profile。
+- 仓库暂无 LICENSE 文件，许可证待定。参考实现只用于核对行为，不复制其代码。
+
+## 文档
+
+| 文档 | 内容 |
+|---|---|
+| [docs/design_zh.md](docs/design_zh.md) | 架构、模块划分、关键取舍 |
+| [docs/validation_lanes_zh.md](docs/validation_lanes_zh.md) | 验证通道与环境前置 |
+| [docs/benchmark_report_zh.md](docs/benchmark_report_zh.md) | 回环性能基线 |
+| [docs/static_analysis_zh.md](docs/static_analysis_zh.md) | cpplint / clang-tidy 结论与偏差 |
+| [docs/comparison_with_rust_zh.md](docs/comparison_with_rust_zh.md) | 与 Rust 原型 simple_someip 的对照 |
+| [docs/reference_projects_zh.md](docs/reference_projects_zh.md) | 参考实现与互操作对端清单 |
+
+环境自检：`./tools/verify_env.sh`。
