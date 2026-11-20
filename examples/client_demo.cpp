@@ -13,6 +13,9 @@
 #include "osp/log.hpp"
 #include "osp/someip/client.hpp"
 #include "osp/someip/e2e_profile1.hpp"
+#include "osp/someip/e2e_profile4.hpp"
+#include "osp/someip/e2e_profile5.hpp"
+#include "osp/someip/e2e_profile7.hpp"
 #include "osp/someip/tp.hpp"
 #include "osp/someip/udp_link.hpp"
 
@@ -129,9 +132,15 @@ bool ParseOptions(int argc, char** argv, Options& options) noexcept {
 }
 
 /// @brief One socket per port: SD traffic on 30490, service traffic on the local port.
-#if defined(SOMEIP_DEMO_E2E)
+#if SOMEIP_DEMO_E2E == 1
 /// @brief Same demo with E2E Profile 1 enabled on requests and replies.
 using E2EPolicy = osp::someip::E2EProfile1<0x1234U>;
+#elif SOMEIP_DEMO_E2E == 4
+using E2EPolicy = osp::someip::E2EProfile4<0x1234U, 1U, 15U>;
+#elif SOMEIP_DEMO_E2E == 5
+using E2EPolicy = osp::someip::E2EProfile5<0x1234U, 15U>;
+#elif SOMEIP_DEMO_E2E == 7
+using E2EPolicy = osp::someip::E2EProfile7<0x1234U, 15U>;
 #else
 using E2EPolicy = osp::someip::NoE2E;
 #endif

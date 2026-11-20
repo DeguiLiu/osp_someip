@@ -13,6 +13,9 @@
 #include "osp/log.hpp"
 #include "osp/someip/server.hpp"
 #include "osp/someip/e2e_profile1.hpp"
+#include "osp/someip/e2e_profile4.hpp"
+#include "osp/someip/e2e_profile5.hpp"
+#include "osp/someip/e2e_profile7.hpp"
 #include "osp/someip/tp.hpp"
 #include "osp/someip/udp_link.hpp"
 
@@ -95,9 +98,15 @@ bool CreateBound(std::uint16_t port, osp::UdpSocket& socket) noexcept {
 
 /// Routes SD traffic (port 30490) to the SD socket and everything else to the
 /// service socket, mirroring how a real node separates the two.
-#if defined(SOMEIP_DEMO_E2E)
+#if SOMEIP_DEMO_E2E == 1
 /// @brief Same demo with E2E Profile 1 enabled on requests and replies.
 using E2EPolicy = osp::someip::E2EProfile1<0x1234U>;
+#elif SOMEIP_DEMO_E2E == 4
+using E2EPolicy = osp::someip::E2EProfile4<0x1234U, 1U, 15U>;
+#elif SOMEIP_DEMO_E2E == 5
+using E2EPolicy = osp::someip::E2EProfile5<0x1234U, 15U>;
+#elif SOMEIP_DEMO_E2E == 7
+using E2EPolicy = osp::someip::E2EProfile7<0x1234U, 15U>;
 #else
 using E2EPolicy = osp::someip::NoE2E;
 #endif

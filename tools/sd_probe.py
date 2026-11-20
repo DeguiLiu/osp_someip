@@ -34,9 +34,9 @@ def parse_args():
     parser.add_argument("--skip-request", action="store_true")
     parser.add_argument(
         "--e2e",
-        choices=("none", "p1"),
+        choices=("none", "p1", "p4", "p5", "p7"),
         default="none",
-        help="protect requests and replies with E2E Profile 1 (data ID 0x1234)",
+        help="protect requests and replies with E2E Profile 1/4/5/7 (data ID 0x1234)",
     )
     parser.add_argument(
         "--tp-chunk",
@@ -106,6 +106,7 @@ def subscribe_datagram(args, request_id):
 
 E2E_DATA_ID = bytes([0x12, 0x34])
 E2E_COUNTER = [0]
+E2E_INSTANCE_WORD = 0x01001234  # instance 1 in the high byte, data ID 0x1234
 
 
 def crc8_sae_j1850(data):
@@ -117,21 +118,83 @@ def crc8_sae_j1850(data):
     return crc ^ 0xFF
 
 
-def e2e_protect(payload):
-    """Profile 1: [counter, crc] in front of the payload."""
-    counter = E2E_COUNTER[0] & 0x0F
-    E2E_COUNTER[0] = (E2E_COUNTER[0] + 1) & 0x0F
-    crc = crc8_sae_j1850(E2E_DATA_ID + bytes([counter, 0]) + payload)
-    return bytes([counter, crc]) + payload
+def crc32_autosar(data):
+    crc = 0xFFFFFFFF
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            crc = ((crc >> 1) ^ 0xC8DF352F) if crc & 1 else crc >> 1
+    return crc ^ 0xFFFFFFFF
 
 
-def e2e_check(body):
-    """Returns (ok, payload, counter) for a Profile 1 protected body."""
-    if len(body) < 2:
+def crc16_ccitt_false(data):
+    crc = 0xFFFF
+    for byte in data:
+        crc ^= byte << 8
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x1021) & 0xFFFF if crc & 0x8000 else (crc << 1) & 0xFFFF
+    return crc
+
+
+def crc64_xz(data):
+    crc = 0xFFFFFFFFFFFFFFFF
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            crc = ((crc >> 1) ^ 0xC96C5795D7870F42) if crc & 1 else crc >> 1
+    return crc ^ 0xFFFFFFFFFFFFFFFF
+
+
+def e2e_protect(payload, profile="p1"):
+    """Returns the protected body for the requested profile."""
+    if profile == "p1":
+        counter = E2E_COUNTER[0] & 0x0F
+        E2E_COUNTER[0] = (E2E_COUNTER[0] + 1) & 0x0F
+        crc = crc8_sae_j1850(E2E_DATA_ID + bytes([counter, 0]) + payload)
+        return bytes([counter, crc]) + payload
+    if profile == "p4":
+        counter = E2E_COUNTER[0] & 0xFFFF
+        E2E_COUNTER[0] = (E2E_COUNTER[0] + 1) & 0xFFFF
+        head = struct.pack(">HHI", 12 + len(payload), counter, E2E_INSTANCE_WORD)
+        crc = crc32_autosar(head + payload)
+        return head[:8] + struct.pack(">I", crc) + payload
+    if profile == "p5":
+        counter = E2E_COUNTER[0] & 0xFF
+        E2E_COUNTER[0] = (E2E_COUNTER[0] + 1) & 0xFF
+        crc = crc16_ccitt_false(bytes([counter]) + payload + E2E_DATA_ID[::-1])
+        return struct.pack(">HB", crc, counter) + payload
+    counter = E2E_COUNTER[0] & 0xFFFFFFFF
+    E2E_COUNTER[0] = (E2E_COUNTER[0] + 1) & 0xFFFFFFFF
+    head = struct.pack(">III", 20 + len(payload), counter, 0x1234)
+    crc = crc64_xz(head + payload)
+    return struct.pack(">Q", crc) + head + payload
+
+
+def e2e_check(body, profile="p1"):
+    """Returns (ok, payload, counter) for a protected body."""
+    if profile == "p1":
+        if len(body) < 2:
+            return False, b"", 0
+        counter = body[0] & 0x0F
+        expected = crc8_sae_j1850(E2E_DATA_ID + bytes([counter, 0]) + body[2:])
+        return expected == body[1], body[2:], counter
+    if profile == "p4":
+        if len(body) < 12:
+            return False, b"", 0
+        counter = struct.unpack(">H", body[2:4])[0]
+        expected = crc32_autosar(body[:8] + body[12:])
+        return expected == struct.unpack(">I", body[8:12])[0], body[12:], counter
+    if profile == "p5":
+        if len(body) < 3:
+            return False, b"", 0
+        counter = body[2]
+        expected = crc16_ccitt_false(body[2:] + E2E_DATA_ID[::-1])
+        return expected == struct.unpack(">H", body[:2])[0], body[3:], counter
+    if len(body) < 20:
         return False, b"", 0
-    counter = body[0] & 0x0F
-    expected = crc8_sae_j1850(E2E_DATA_ID + bytes([counter, 0]) + body[2:])
-    return expected == body[1], body[2:], counter
+    counter = struct.unpack(">I", body[12:16])[0]
+    expected = crc64_xz(body[8:])
+    return expected == struct.unpack(">Q", body[:8])[0], body[20:], counter
 
 
 def tp_segments(args, payload, request_id, message_type=0x20):
@@ -235,8 +298,8 @@ def run_client(args):
                             print(f"request sent as tp segments of {args.tp_chunk}")
                         else:
                             body = struct.pack(">I", 0x11223344)
-                            if args.e2e == "p1":
-                                body = e2e_protect(body)
+                            if args.e2e != "none":
+                                body = e2e_protect(body, args.e2e)
                             header = someip_header(
                                 (args.service << 16) | args.method,
                                 8 + len(body),
@@ -249,8 +312,8 @@ def run_client(args):
                         request_sent = True
         elif message_type == 0x80:
             payload = datagram[16:]
-            if args.e2e == "p1":
-                ok, payload, counter = e2e_check(payload)
+            if args.e2e != "none":
+                ok, payload, counter = e2e_check(payload, args.e2e)
                 print(f"e2e check={'ok' if ok else 'failed'} counter={counter}")
             print(
                 f"response request_id=0x{struct.unpack('>I', datagram[8:12])[0]:08X} "
@@ -352,15 +415,15 @@ def run_server(args):
                         service_sock.sendto(segment, source)
                     print(f"request 0x{message_id & 0xFFFF:04X} -> tp response of 128 bytes")
                 else:
-                    if args.e2e == "p1":
-                        ok, payload, counter = e2e_check(body)
+                    if args.e2e != "none":
+                        ok, payload, counter = e2e_check(body, args.e2e)
                         if not ok:
                             print("e2e check failed, request dropped")
                             continue
                         print(f"e2e check=ok counter={counter}")
                         body = payload
-                    if args.e2e == "p1":
-                        body = e2e_protect(body)
+                    if args.e2e != "none":
+                        body = e2e_protect(body, args.e2e)
                     response = (
                         someip_header(message_id, 8 + len(body), request_id, 0x80, 0x00)
                         + body

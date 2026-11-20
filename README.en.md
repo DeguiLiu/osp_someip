@@ -101,9 +101,9 @@ cmake --build build-demo -j8
 `someip_fragmented_demo` needs no sockets: it protects a 300-byte request with E2E Profile 1,
 splits it into 19 TP segments, feeds them to a server and verifies the protected reply.
 
-`someip_e2e_server_demo` / `someip_e2e_client_demo` are the same examples compiled with E2E
-Profile 1 enabled; together with the probe's `--e2e p1` they exercise protect, check and strip
-over real UDP.
+`someip_e2e1|4|5|7_{server,client}_demo` are the same examples compiled per E2E profile;
+together with the probe's `--e2e p1|p4|p5|p7` they exercise protect, check and strip over real
+UDP.
 
 `--tp-chunk` also works with `--mode server`: the probe splits its reply into TP segments to
 exercise client-side reassembly.
