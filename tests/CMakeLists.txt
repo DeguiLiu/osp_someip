@@ -23,6 +23,9 @@ add_executable(someip_tests
     test_header.cpp
     test_message.cpp
     test_wire_golden.cpp
+    test_sd_entry.cpp
+    test_sd_options.cpp
+    test_sd_header.cpp
 )
 target_link_libraries(someip_tests Catch2::Catch2WithMain osp_someip)
 

@@ -1,8 +1,8 @@
 # osp-someip
 
 面向嵌入式 Linux 与 RT-Thread 的 SOME/IP 协议栈，C++17 头文件库，基于 newosp 框架。
-当前处于 M0 阶段：SOME/IP 线格式（header、message、消息遍历）已完成并通过字节级 golden 测试；
-Service Discovery 为下一阶段。
+当前完成 M0 与 M1：SOME/IP 线格式、消息遍历、Service Discovery 编解码与三种数据报构建器，
+全部通过字节级 golden 测试；服务端与客户端为下一阶段。
 
 ## 结论先行
 
@@ -12,8 +12,8 @@ Service Discovery 为下一阶段。
 | 内存 | 零堆分配，定容视图与调用方缓冲区 |
 | 多态 | CRTP 静态多态，无 vtable、无工厂、无动态池 |
 | 线格式 | Header / Message / Opaque payload 已实现（M0） |
-| 测试 | 35 个用例、915 条断言，普通构建与无异常构建均通过 |
-| Service Discovery | M1 计划中 |
+| Service Discovery | entry / option / header / 数据报构建器已实现（M1） |
+| 测试 | 66 个用例、1082 条断言，普通构建与无异常构建均通过 |
 
 ## 目录结构
 
@@ -27,6 +27,8 @@ include/osp/someip/
   message_id.hpp      服务 ID / 方法 ID
   message_type.hpp    消息类型与 TP 标志
   return_code.hpp     返回码（命名码、通用区间、接口区间）
+  sd/                 SD 类型、entry、option、header、会话计数
+  sd_codec.hpp        Offer / StopOffer / Subscribe / Ack 数据报构建器
 tests/                Catch2 测试，含手工推导的线格式 golden
 docs/                 设计文档与参考实现清单
 ```

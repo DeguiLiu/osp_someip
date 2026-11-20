@@ -13,6 +13,12 @@
 #include "osp/someip/message_type.hpp"
 #include "osp/someip/payload.hpp"
 #include "osp/someip/return_code.hpp"
+#include "osp/someip/sd/entry.hpp"
+#include "osp/someip/sd/header.hpp"
+#include "osp/someip/sd/options.hpp"
+#include "osp/someip/sd/session.hpp"
+#include "osp/someip/sd/types.hpp"
+#include "osp/someip/sd_codec.hpp"
 #include "osp/someip/wire.hpp"
 
 #endif  // OSP_SOMEIP_SOMEIP_HPP_

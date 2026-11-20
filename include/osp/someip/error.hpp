@@ -32,6 +32,8 @@ enum class ErrorCode : std::uint8_t {
   kInvalidReturnCode,
   /// SOME/IP length field is smaller than the 8-byte minimum.
   kInvalidLength,
+  /// SD TTL exceeds the 24-bit maximum.
+  kInvalidTtl,
   /// Service Discovery payload violates an SD constraint.
   kInvalidMessage,
   /// A caller asked for an SD header on a message that is not SD.
@@ -80,6 +82,10 @@ struct Error final {
 
   static constexpr Error InvalidLength(std::uint32_t length) noexcept {
     return Error{ErrorCode::kInvalidLength, length, 0U};
+  }
+
+  static constexpr Error InvalidTtl(std::uint32_t ttl) noexcept {
+    return Error{ErrorCode::kInvalidTtl, ttl, 0U};
   }
 
   static constexpr Error InvalidMessage(std::uint16_t reason) noexcept {

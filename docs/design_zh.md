@@ -96,14 +96,14 @@ osp::expected<std::uint32_t, Error> DoEncodeTo(osp::span<std::uint8_t> out) cons
 | L2 互操作 | 与 vsomeip 容器对端做 RPC、通知、订阅 | 双向收发一致 |
 | L3 目标 | ARM Linux / RT-Thread 构建与静态内存报告 | 无堆、尺寸达标 |
 
-当前 L0 结果：35 个用例、915 条断言；普通构建与 `-fno-exceptions -fno-rtti` 构建均通过。
+当前 L0 结果：66 个用例、1082 条断言；普通构建与 `-fno-exceptions -fno-rtti` 构建均通过。
 
 ## 5. 里程碑与风险
 
 | 阶段 | 交付 | 主要风险 |
 |---|---|---|
 | M0（完成） | header/message/walker + 3 条 golden | 无 |
-| M1 | SD entry/option/header、数据报构建器 | option 长度与 entry 计数边界 |
+| M1（完成） | SD entry/option/header、数据报构建器 | option 长度与 entry 计数边界 |
 | M2 | 服务端 offer、事件发布、订阅槽表 | 订阅 TTL 与重播时序 |
 | M3 | 客户端发现、RPC 匹配、超时重传 | 与 vsomeip 的行为差异 |
 | M4 | newosp 接入、ARM 实测、shell 命令 | 目标板与工具链可用性 |

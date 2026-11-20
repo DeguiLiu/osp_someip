@@ -12,6 +12,7 @@
  */
 
 #include "osp/someip/message.hpp"
+#include "osp/someip/sd_codec.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -25,6 +26,9 @@ using osp::someip::MessageType;
 using osp::someip::MessageTypeField;
 using osp::someip::OpaquePayload;
 using osp::someip::ReturnCode;
+using osp::someip::OfferServiceRequest;
+using osp::someip::SubscribeAckRequest;
+using osp::someip::SubscribeEventGroupRequest;
 
 TEST_CASE("golden - request header bytes", "[golden][header]") {
   const Header header =
@@ -94,6 +98,123 @@ TEST_CASE("golden - message with opaque payload", "[golden][message]") {
       0x00U,                       // message_type: Request, no TP
       0x00U,                       // return_code: Ok
       0xDEU, 0xADU, 0xBEU, 0xEFU,  // opaque payload bytes
+  };
+  REQUIRE(0 == std::memcmp(buf, expected, sizeof(expected)));
+}
+
+TEST_CASE("golden - subscribe event group datagram", "[golden][sd][codec]") {
+  SubscribeEventGroupRequest request;
+  request.service_id = 0x1234U;
+  request.instance_id = 0x0001U;
+  request.major_version = 1U;
+  request.event_group_id = 0x0001U;
+  request.ttl = 5U;
+  request.local_ip = {10U, 0U, 0U, 5U};
+  request.local_rx_port = 30509U;
+
+  auto counter = osp::someip::sd::SdSessionCounter::Resume(
+      6U, osp::someip::sd::RebootFlag::kContinuous);
+  const auto session = counter.Next();
+  REQUIRE(7U == session.id);
+
+  std::uint8_t buf[64] = {};
+  const auto written = osp::someip::BuildSubscribeEventGroupDatagram(
+      osp::make_span(buf), request, session);
+  REQUIRE(written.has_value());
+  REQUIRE(56U == written.value());
+
+  const std::uint8_t expected[56] = {
+      0xFFU, 0xFFU, 0x81U, 0x00U,  // message_id: SD
+      0x00U, 0x00U, 0x00U, 0x30U,  // length = 48 (SD payload 40 + 8)
+      0x00U, 0x00U, 0x00U, 0x07U,  // request_id = session 7
+      0x01U, 0x01U,                // protocol/interface version
+      0x02U, 0x00U,                // Notification, Ok
+      0x40U, 0x00U, 0x00U, 0x00U,  // flags: unicast only (Continuous)
+      0x00U, 0x00U, 0x00U, 0x10U,  // entries_size = 16
+      0x06U, 0x00U, 0x00U, 0x10U,  // Subscribe, counts first=1
+      0x12U, 0x34U, 0x00U, 0x01U,  // service 0x1234, instance 1
+      0x01U, 0x00U, 0x00U, 0x05U,  // major 1, ttl 5
+      0x00U, 0x00U, 0x00U, 0x01U,  // counter 0, event group 1
+      0x00U, 0x00U, 0x00U, 0x0CU,  // options_size = 12
+      0x00U, 0x09U, 0x04U, 0x00U,  // option length 9, IPv4 endpoint
+      10U,   0U,    0U,    5U,     // 10.0.0.5
+      0x00U, 0x11U, 0x77U, 0x2DU,  // reserved, UDP, port 30509
+  };
+  REQUIRE(0 == std::memcmp(buf, expected, sizeof(expected)));
+}
+
+TEST_CASE("golden - offer service datagram", "[golden][sd][codec]") {
+  OfferServiceRequest request;
+  request.service_id = 0x0042U;
+  request.instance_id = 0x0001U;
+  request.major_version = 1U;
+  request.minor_version = 0U;
+  request.ttl = 3U;
+  request.local_ip = {192U, 0U, 2U, 1U};
+  request.unicast_port = 30501U;
+
+  auto counter = osp::someip::sd::SdSessionCounter::Resume(
+      0U, osp::someip::sd::RebootFlag::kContinuous);
+  const auto session = counter.Next();
+  REQUIRE(1U == session.id);
+
+  std::uint8_t buf[64] = {};
+  const auto written =
+      osp::someip::BuildOfferServiceDatagram(osp::make_span(buf), request, session);
+  REQUIRE(written.has_value());
+  REQUIRE(56U == written.value());
+
+  const std::uint8_t expected[56] = {
+      0xFFU, 0xFFU, 0x81U, 0x00U,  // message_id: SD
+      0x00U, 0x00U, 0x00U, 0x30U,  // length = 48
+      0x00U, 0x00U, 0x00U, 0x01U,  // request_id = session 1
+      0x01U, 0x01U, 0x02U, 0x00U,  // versions, Notification, Ok
+      0x40U, 0x00U, 0x00U, 0x00U,  // flags: unicast only
+      0x00U, 0x00U, 0x00U, 0x10U,  // entries_size = 16
+      0x01U, 0x00U, 0x00U, 0x10U,  // OfferService, counts first=1
+      0x00U, 0x42U, 0x00U, 0x01U,  // service 0x0042, instance 1
+      0x01U, 0x00U, 0x00U, 0x03U,  // major 1, ttl 3
+      0x00U, 0x00U, 0x00U, 0x00U,  // minor version 0
+      0x00U, 0x00U, 0x00U, 0x0CU,  // options_size = 12
+      0x00U, 0x09U, 0x04U, 0x00U,  // option length 9, IPv4 endpoint
+      192U,  0U,    2U,    1U,     // 192.0.2.1
+      0x00U, 0x11U, 0x77U, 0x25U,  // reserved, UDP, port 30501
+  };
+  REQUIRE(0 == std::memcmp(buf, expected, sizeof(expected)));
+}
+
+TEST_CASE("golden - subscribe ack datagram", "[golden][sd][codec]") {
+  SubscribeAckRequest request;
+  request.service_id = 0x0099U;
+  request.instance_id = 2U;
+  request.event_group_id = 0x0005U;
+  request.major_version = 1U;
+  request.ttl = 10U;
+  request.counter = 0U;
+
+  auto counter = osp::someip::sd::SdSessionCounter::Resume(
+      1U, osp::someip::sd::RebootFlag::kContinuous);
+  const auto session = counter.Next();
+  REQUIRE(2U == session.id);
+
+  std::uint8_t buf[64] = {};
+  const auto written =
+      osp::someip::BuildSubscribeAckDatagram(osp::make_span(buf), request, session);
+  REQUIRE(written.has_value());
+  REQUIRE(44U == written.value());
+
+  const std::uint8_t expected[44] = {
+      0xFFU, 0xFFU, 0x81U, 0x00U,  // message_id: SD
+      0x00U, 0x00U, 0x00U, 0x24U,  // length = 36 (SD payload 28 + 8)
+      0x00U, 0x00U, 0x00U, 0x02U,  // request_id = session 2
+      0x01U, 0x01U, 0x02U, 0x00U,  // versions, Notification, Ok
+      0x40U, 0x00U, 0x00U, 0x00U,  // flags: unicast only
+      0x00U, 0x00U, 0x00U, 0x10U,  // entries_size = 16
+      0x07U, 0x00U, 0x00U, 0x00U,  // SubscribeAck, no options
+      0x00U, 0x99U, 0x00U, 0x02U,  // service 0x0099, instance 2
+      0x01U, 0x00U, 0x00U, 0x0AU,  // major 1, ttl 10
+      0x00U, 0x00U, 0x00U, 0x05U,  // counter 0, event group 5
+      0x00U, 0x00U, 0x00U, 0x00U,  // options_size = 0
   };
   REQUIRE(0 == std::memcmp(buf, expected, sizeof(expected)));
 }
