@@ -184,9 +184,9 @@ CRC-8 采用 SAE J1850 参数（poly 0x1D、init 0xFF、终值异或 0xFF），�
 | L2 互操作 | 与 vsomeip 容器对端做 RPC、通知、订阅 | 双向收发一致 |
 | L3 目标 | ARM Linux / RT-Thread 构建与静态内存报告 | 无堆、尺寸达标 |
 
-当前 L0/L1 结果：114 个用例、3826 条断言（含 3000 轮确定性变异扫描），外加零分配见证进程；
+当前 L0/L1 结果：116 个用例、3831 条断言（含 3000 轮确定性变异扫描），外加零分配见证进程；
 普通构建、`-fno-exceptions -fno-rtti` 构建与 ASan+UBSan 构建均通过。L2 的组播在真实网卡
-（`ens192`）上验证；L3 完成 aarch64 交叉构建与 qemu 运行，113 过、1 跳过。
+（`ens192`）上验证；L3 完成 aarch64 交叉构建与 qemu 运行，115 过、1 跳过。
 
 ## 5. 里程碑与风险
 
@@ -196,7 +196,7 @@ CRC-8 采用 SAE J1850 参数（poly 0x1D、init 0xFF、终值异或 0xFF），�
 | M1（完成） | SD entry/option/header 编解码、零拷贝解析、数据报构建器 | option 长度与 entry 计数边界 |
 | M2（核心完成） | 服务端 offer/stop-offer、find 应答、订阅槽表、事件发布、RPC 分发、TTL 与重播 | 订阅 TTL 与重播时序 |
 | M3（核心完成） | 客户端发现、RPC 匹配、超时、事件回调 | 与 vsomeip 的行为差异 |
-| M4（部分完成） | aarch64 交叉构建与 qemu 实测、组播真机验证 | 目标板数据、vsomeip 互操作 |
+| M4（部分完成） | aarch64 交叉构建与 qemu 实测、组播真机验证、vsomeip 双向互操作 | 目标板数据 |
 
 主要风险有三个：一是 SD 时序（offer 重播、TTL 过期）只能靠互操作暴露；
 二是 `-Wconversion` 下的大量窄化需要逐处显式转换；三是目标板性能数据不能由 x86 结果外推。

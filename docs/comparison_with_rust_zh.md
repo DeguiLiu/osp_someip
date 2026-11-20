@@ -2,7 +2,7 @@
 
 结论：两者在线格式与 SD 语义对齐，差异集中在运行时模型：Rust 用 async 执行器、分配器可选，
 本项目用调用方驱动 + 定容 + 无堆。功能上本项目已补齐 SD 编解码、服务端与客户端核心、
-SOME/IP-TP 重组、E2E Profile 1、真实网卡组播；仍未做的是 vsomeip 互操作与板级实测。
+SOME/IP-TP 重组、E2E Profile 1、真实网卡组播与 vsomeip 双向互操作；仍未做的是板级实测。
 
 ## 1. 口径
 
@@ -29,7 +29,7 @@ SOME/IP-TP 重组、E2E Profile 1、真实网卡组播；仍未做的是 vsomeip
 | 客户端发现 / 订阅 / RPC | 有（async，自动续订、重启检测） | 有（回调 + 超时 + 续订 + 可用性 + 重启检测） | 请求 ID 规则一致：client<<16 \| session |
 | E2E 保护 | 仅 `E2EHandle` trait 钩子 | 策略钩子 + 内置 Profile 1（CRC-8 SAE J1850 + 计数器） | 本项目带一个可直接用的 profile |
 | 组播加入 | 有（socket2） | 有（`JoinSdMulticast` + `IP_MULTICAST_IF`） | 本项目已在真实网卡 `ens192` 上验证收发 |
-| 互操作实测（vsomeip） | 有（Docker 容器） | 未跑 | 本机账号不在 docker 组 |
+| 互操作实测（vsomeip） | 有（Docker 容器） | 有（3.4.10，netns + veth，双向） | 本项目不走容器，见验证通道文档 |
 | 金丝雀/无分配见证 | 有 | 有 | 本项目用全局 `operator new` 计数 |
 
 ## 3. 结构与运行时差异
@@ -49,17 +49,16 @@ SOME/IP-TP 重组、E2E Profile 1、真实网卡组播；仍未做的是 vsomeip
 
 | 项 | Rust | 本项目 |
 |---|---|---|
-| 单元/集成测试 | 540 个 `#[test]` + 285 个 `#[tokio::test]` | 114 个用例、3826 条断言（含变异扫描） |
+| 单元/集成测试 | 540 个 `#[test]` + 285 个 `#[tokio::test]` | 116 个用例、3831 条断言（含变异扫描） |
 | 线格式 golden | 19 条手写字面量 | 19 条同源字面量（逐字节移植） |
 | 无分配 | `no_alloc_witness` 测试 | `someip_no_alloc` 进程，覆盖 server + client |
-| 真实网络 | tokio + vsomeip 容器互操作 | 真实 UDP 环回用例 + 双进程 demo + 独立 Python 探针互通 |
+| 真实网络 | tokio + vsomeip 容器互操作 | 真实 UDP 用例 + 双进程 demo + Python 探针 + vsomeip 双向互操作 |
 | 异常/panic 关闭 | `panic = abort`、no_std | `-fno-exceptions -fno-rtti` 全量构建 |
 | Sanitizer | Miri / fuzz（CI） | ASan + UBSan 全量通过 |
 | 性能基线 | 未给出固定数字 | 回环 3000 RTT：x86 p50 5 µs；aarch64（qemu）p50 12 µs |
 
 ## 5. 已知差距与补齐顺序
 
-1. **互操作实测**：换到 Docker 可用的机器，用 `tests/data/vsomeip-peer` 的镜像跑
-   find/offer/subscribe/publish/RPC。
-2. **目标板实测**：aarch64 已完成交叉构建与 qemu 运行，仍缺真实板卡的内存与吞吐数据。
+1. **板级实测**：aarch64 已完成交叉构建与 qemu 运行，仍缺真实板卡的内存与吞吐数据。
+2. **互操作广度**：vsomeip 3.4.10 的常规路径已通过；TLS、TP 事件与跨交换机组播未覆盖。
 3. **TP 乱序与重叠分段**：当前按序重组，乱序直接丢弃；Rust 侧未实现重组，因此没有可对照的行为。

@@ -43,7 +43,7 @@ cmake --build --preset host-debug -j8
 ctest --preset host-debug
 ```
 
-主机上 114 个用例、3826 条断言通过；`noexc` 与 ASan + UBSan 两组构建另行跑通。
+主机上 116 个用例、3831 条断言通过；`noexc` 与 ASan + UBSan 两组构建另行跑通。
 aarch64 交叉构建后在 qemu 下 113 过、1 跳过（组播用例需要真机网卡）。
 x86 回环 3000 次 RPC 往返，p50 5 µs、p99 9–12 µs，约 16 万次请求/秒；
 aarch64（qemu）同一基准 p50 11 µs、p99 24 µs，约 6.6 万次请求/秒。
@@ -151,8 +151,9 @@ docs/              设计、验证、基准、静态分析文档
 
 - ARM：已用 aarch64 交叉工具链构建并通过 qemu 运行，无目标板实测数据。
 - 组播：已在真实网卡（`ens192`）上验证入组与接收，未与外部节点做过跨越交换机的对测。
-- vsomeip 互操作未执行。本机 Docker 需要加入 docker 组，步骤见
-  `docs/validation_lanes_zh.md`。
+- vsomeip 3.4.10 双向互操作已通过（用户命名空间加 veth 对连，不用 Docker）：
+  服务端侧收到订阅、事件与 RPC 应答，客户端侧完成发现、订阅、RPC 与事件。
+  复现见 `tools/vsomeip_interop.sh` 与 `docs/validation_lanes_zh.md`。
 - SOME/IP-TP 按序重组，乱序分段直接丢弃；E2E 只带 Profile 1，没有 Profile 2/4/5/7。
 - 参考实现只用于核对行为，不复制其代码。
 
