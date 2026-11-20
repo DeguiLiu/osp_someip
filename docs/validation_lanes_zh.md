@@ -213,6 +213,12 @@ qemu-user 只翻译指令与系统调用，调度、内核网络栈与用户态 
 AARCH64_TOOLCHAIN_ROOT=$HOME/opt/cross-aarch64/root \
 tools/arm_vm.sh Image busybox.static \
     build/aarch64-tests/tests/someip_tests build/aarch64/examples/someip_loopback_bench
+
+# 再把两个示例程序放进 initramfs，在 guest 内跑一次完整链路
+AARCH64_TOOLCHAIN_ROOT=$HOME/opt/cross-aarch64/root \
+tools/arm_vm.sh Image busybox.static \
+    build/aarch64-tests/tests/someip_tests build/aarch64/examples/someip_loopback_bench \
+    build/aarch64/examples/someip_server_demo build/aarch64/examples/someip_client_demo
 ```
 
 实测（TCG，2 vCPU，1 GB）：
@@ -228,6 +234,16 @@ BENCH_RC=0
 
 比 qemu-user 慢一个数量级，符合 TCG 全系统模拟的预期。它的价值在于证明代码在完整内核、
 真实 glibc 用户态与 initramfs 启动链下可运行。
+
+带示例程序时，guest 内还会跑一次端到端链路（服务端后台启动，客户端发现、订阅、RPC、收事件）：
+
+```
+[client] service 0x1234/0x0001 available
+[client] subscribe ack 0x1234/0x0001 eg=0x0001 ttl=10
+[client] response 0x00010001, 4 payload bytes
+[client] received 5 event(s)
+DEMO_RC=0
+```
 
 结果：141 个用例通过，1 个跳过（组播），`someip_loopback_bench` 为
 p50 11 µs、p99 24 µs、约 6.6 万次请求/秒。这是 qemu 用户态模拟，不是板上数据。

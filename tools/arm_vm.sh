@@ -18,8 +18,10 @@ set -eu
 
 KERNEL=${1:?usage: arm_vm.sh <Image> <busybox.static> <tests> <bench>}
 BUSYBOX=${2:?usage: arm_vm.sh <Image> <busybox.static> <tests> <bench>}
-TESTS=${3:?usage: arm_vm.sh <Image> <busybox.static> <tests> <bench>}
-BENCH=${4:?usage: arm_vm.sh <Image> <busybox.static> <tests> <bench>}
+TESTS=${3:?usage: arm_vm.sh <Image> <busybox.static> <tests> <bench> [server_demo client_demo]}
+BENCH=${4:?usage: arm_vm.sh <Image> <busybox.static> <tests> <bench> [server_demo client_demo]}
+SERVER=${5:-}
+CLIENT=${6:-}
 ROOT=${AARCH64_TOOLCHAIN_ROOT:?set AARCH64_TOOLCHAIN_ROOT to the cross toolchain root}
 LIBDIR="$ROOT/usr/aarch64-linux-gnu/lib"
 
@@ -30,6 +32,10 @@ mkdir -p "$WORK/bin" "$WORK/lib" "$WORK/proc" "$WORK/sys" "$WORK/dev" "$WORK/tmp
 cp "$BUSYBOX" "$WORK/bin/busybox"
 cp "$TESTS" "$WORK/bin/someip_tests"
 cp "$BENCH" "$WORK/bin/someip_loopback_bench"
+if [ -n "$SERVER" ] && [ -n "$CLIENT" ]; then
+    cp "$SERVER" "$WORK/bin/someip_server_demo"
+    cp "$CLIENT" "$WORK/bin/someip_client_demo"
+fi
 for lib in ld-linux-aarch64.so.1 libc.so.6 libm.so.6 libgcc_s.so.1 libstdc++.so.6; do
     cp "$LIBDIR/$lib" "$WORK/lib/"
 done
@@ -46,6 +52,13 @@ echo "KERNEL: $(uname -srm)"
 echo "TESTS_RC=$?"
 /bin/someip_loopback_bench
 echo "BENCH_RC=$?"
+if [ -x /bin/someip_server_demo ] && [ -x /bin/someip_client_demo ]; then
+    /bin/someip_server_demo --iface 127.0.0.1 --seconds 8 &
+    sleep 1
+    /bin/someip_client_demo --server 127.0.0.1 --local 127.0.0.1 --port 30510 \
+        --service 1234 --method 0001 --seconds 5
+    echo "DEMO_RC=$?"
+fi
 poweroff -f
 INIT
 chmod +x "$WORK/init"
