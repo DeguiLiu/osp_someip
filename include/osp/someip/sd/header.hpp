@@ -16,6 +16,8 @@
 
 #include "osp/someip/error.hpp"
 #include "osp/someip/sd/entry.hpp"
+#include "osp/someip/sd/entry_view.hpp"
+#include "osp/someip/sd/option_view.hpp"
 #include "osp/someip/sd/options.hpp"
 #include "osp/someip/sd/types.hpp"
 #include "osp/someip/wire.hpp"
@@ -29,6 +31,9 @@ namespace osp::someip::sd {
 
 /// @brief Fixed part of the SD payload: flags, reserved, and the two size fields.
 inline constexpr std::uint32_t kSdHeaderFixedSize = 12U;
+
+/// @brief Offset of the entries section: flags(4) + entries_size(4).
+inline constexpr std::size_t kEntriesOffset = 8U;
 
 /**
  * @brief Borrowed SD header over caller-owned entry and option slices.
@@ -139,6 +144,105 @@ class Header final : public osp::someip::WireEncoder<Header> {
   Flags flags_{};
   osp::span<const Entry> entries_{};
   osp::span<const Options> options_{};
+};
+
+/**
+ * @brief Zero-copy, pre-validated view over an SD payload.
+ *
+ * Parse() checks the section bounds, that entries_size is a multiple of 16,
+ * and validates every option (length, per-type length, transport-protocol
+ * byte). Unknown option types are kept in place. Unknown entry types are
+ * skipped by NextEntry(), matching the reference implementation.
+ */
+class SdHeaderView final {
+ public:
+  constexpr SdHeaderView() noexcept = default;
+
+  static osp::expected<SdHeaderView, Error> Parse(
+      osp::span<const std::uint8_t> payload) noexcept {
+    if (payload.size() < kSdHeaderFixedSize) {
+      return osp::expected<SdHeaderView, Error>::error(
+          Error::Incomplete(kSdHeaderFixedSize, static_cast<std::uint32_t>(payload.size())));
+    }
+    const std::uint32_t entries_size = detail::ReadU32Be(payload, 4U);
+    if (0U != (entries_size % kEntrySize)) {
+      return osp::expected<SdHeaderView, Error>::error(Error::InvalidLength(entries_size));
+    }
+    const std::size_t options_size_offset = 8U + entries_size;
+    if (payload.size() < options_size_offset + 4U) {
+      return osp::expected<SdHeaderView, Error>::error(Error::Incomplete(
+          static_cast<std::uint32_t>(options_size_offset + 4U),
+          static_cast<std::uint32_t>(payload.size())));
+    }
+    const std::uint32_t options_size = detail::ReadU32Be(payload, options_size_offset);
+    const std::size_t total =
+        options_size_offset + 4U + static_cast<std::size_t>(options_size);
+    if (payload.size() < total) {
+      return osp::expected<SdHeaderView, Error>::error(Error::Incomplete(
+          static_cast<std::uint32_t>(total), static_cast<std::uint32_t>(payload.size())));
+    }
+    SdHeaderView view;
+    view.flags_ = Flags::FromByte(payload[0U]);
+    view.entries_ = osp::span<const std::uint8_t>(payload.data() + kEntriesOffset,
+                                                  entries_size);
+    view.options_bytes_ = osp::span<const std::uint8_t>(
+        payload.data() + options_size_offset + 4U, options_size);
+    view.options_ = OptionWalker(view.options_bytes_);
+    Error err = view.ValidateOptions();
+    if (ErrorCode::kNone != err.code) {
+      return osp::expected<SdHeaderView, Error>::error(err);
+    }
+    return osp::expected<SdHeaderView, Error>::success(view);
+  }
+
+  constexpr Flags GetFlags() const noexcept { return flags_; }
+  constexpr osp::span<const std::uint8_t> EntriesBytes() const noexcept { return entries_; }
+  constexpr osp::span<const std::uint8_t> OptionsBytes() const noexcept {
+    return options_bytes_;
+  }
+
+  /// @brief Next entry of a known type; unknown types are skipped.
+  bool NextEntry(EntryView& out) noexcept {
+    while (entry_offset_ + kEntrySize <= entries_.size()) {
+      const auto slice = osp::span<const std::uint8_t>(entries_.data() + entry_offset_,
+                                                       kEntrySize);
+      entry_offset_ += kEntrySize;
+      auto parsed = EntryView::Parse(slice);
+      if (parsed.has_value()) {
+        out = parsed.value();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// @brief Next option; the section was validated by Parse().
+  bool NextOption(OptionView& out) noexcept { return options_.Next(out); }
+
+ private:
+  Error ValidateOptions() noexcept {
+    Error err = Error::None();
+    osp::span<const std::uint8_t> rest = options_bytes_;
+    while (!rest.empty() && ErrorCode::kNone == err.code) {
+      auto parsed = OptionView::Parse(rest);
+      if (!parsed.has_value()) {
+        err = parsed.get_error();
+      } else {
+        rest = parsed.value().rest;
+      }
+    }
+    if (ErrorCode::kNone == err.code && !rest.empty()) {
+      err = Error::IncorrectOptionsSize(static_cast<std::uint32_t>(options_bytes_.size()),
+                                        static_cast<std::uint32_t>(rest.size()));
+    }
+    return err;
+  }
+
+  Flags flags_{};
+  osp::span<const std::uint8_t> entries_{};
+  std::size_t entry_offset_{0U};
+  osp::span<const std::uint8_t> options_bytes_{};
+  OptionWalker options_{};
 };
 
 }  // namespace osp::someip::sd

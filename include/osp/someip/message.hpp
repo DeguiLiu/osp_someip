@@ -10,6 +10,7 @@
 #include "osp/someip/error.hpp"
 #include "osp/someip/header.hpp"
 #include "osp/someip/payload.hpp"
+#include "osp/someip/sd/header.hpp"
 #include "osp/someip/wire.hpp"
 #include "osp/span.hpp"
 #include "osp/vocabulary.hpp"
@@ -80,6 +81,14 @@ class MessageView final {
   constexpr HeaderView Head() const noexcept { return header_; }
   constexpr osp::span<const std::uint8_t> Body() const noexcept { return payload_; }
   constexpr bool IsSd() const noexcept { return header_.IsSd(); }
+
+  /// @brief Parse the payload as an SD header; requires an SD message.
+  osp::expected<sd::SdHeaderView, Error> SdHeader() const noexcept {
+    if (!IsSd()) {
+      return osp::expected<sd::SdHeaderView, Error>::error(Error::NotSdMessage());
+    }
+    return sd::SdHeaderView::Parse(payload_);
+  }
 
  private:
   constexpr MessageView(HeaderView header, osp::span<const std::uint8_t> payload) noexcept

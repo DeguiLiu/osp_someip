@@ -34,6 +34,18 @@ enum class ErrorCode : std::uint8_t {
   kInvalidLength,
   /// SD TTL exceeds the 24-bit maximum.
   kInvalidTtl,
+  /// SD entry type byte is not one of the four known types.
+  kInvalidEntryType,
+  /// SD option type byte is not one of the eight known types.
+  kInvalidOptionType,
+  /// A fixed-size option carries a length field other than its expected value.
+  kInvalidOptionLength,
+  /// An IP-bearing option carries a protocol byte other than UDP or TCP.
+  kInvalidOptionProtocol,
+  /// An option section does not end on an option boundary.
+  kIncorrectOptionsSize,
+  /// A Configuration option string exceeds kMaxConfigurationStringLength.
+  kConfigurationStringTooLong,
   /// Service Discovery payload violates an SD constraint.
   kInvalidMessage,
   /// A caller asked for an SD header on a message that is not SD.
@@ -86,6 +98,32 @@ struct Error final {
 
   static constexpr Error InvalidTtl(std::uint32_t ttl) noexcept {
     return Error{ErrorCode::kInvalidTtl, ttl, 0U};
+  }
+
+  static constexpr Error InvalidEntryType(std::uint8_t type) noexcept {
+    return Error{ErrorCode::kInvalidEntryType, type, 0U};
+  }
+
+  static constexpr Error InvalidOptionType(std::uint8_t type) noexcept {
+    return Error{ErrorCode::kInvalidOptionType, type, 0U};
+  }
+
+  static constexpr Error InvalidOptionLength(std::uint32_t expected,
+                                             std::uint32_t actual) noexcept {
+    return Error{ErrorCode::kInvalidOptionLength, expected, actual};
+  }
+
+  static constexpr Error InvalidOptionProtocol(std::uint8_t protocol) noexcept {
+    return Error{ErrorCode::kInvalidOptionProtocol, protocol, 0U};
+  }
+
+  static constexpr Error IncorrectOptionsSize(std::uint32_t needed,
+                                              std::uint32_t available) noexcept {
+    return Error{ErrorCode::kIncorrectOptionsSize, needed, available};
+  }
+
+  static constexpr Error ConfigurationStringTooLong(std::uint32_t length) noexcept {
+    return Error{ErrorCode::kConfigurationStringTooLong, length, 0U};
   }
 
   static constexpr Error InvalidMessage(std::uint16_t reason) noexcept {
