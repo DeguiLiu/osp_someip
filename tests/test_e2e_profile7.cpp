@@ -181,3 +181,36 @@ TEST_CASE("e2e p7 - server checks the request and protects the reply", "[e2e][pr
   REQUIRE(data.size() == check.payload.size());
   REQUIRE(0 == std::memcmp(check.payload.data(), data.data(), data.size()));
 }
+
+TEST_CASE("e2e p7 - counters wrap from 0xFFFFFFFF to 0", "[e2e][profile7]") {
+  Profile sender;
+  Profile receiver;
+  std::array<std::uint8_t, 64U> buffer{};
+  const std::array<std::uint8_t, 2U> data{1U, 2U};
+  std::memcpy(buffer.data(), data.data(), data.size());
+  const auto first =
+      sender.Protect(MessageId(0x12340001U), kUpperHeader, Whole(buffer), data.size());
+  const std::size_t size = first.size();
+  std::array<std::uint8_t, 32U> low{};
+  std::memcpy(low.data(), first.data(), size);
+
+  std::array<std::uint8_t, 32U> high = low;
+  high[12U] = 0xFFU;
+  high[13U] = 0xFFU;
+  high[14U] = 0xFFU;
+  high[15U] = 0xFFU;
+  for (std::size_t index = 0U; index < 8U; ++index) {
+    high[index] = 0U;
+  }
+  osp::someip::Crc64Xz crc;
+  crc.Update(osp::span<const std::uint8_t>(high.data() + 8U, size - 8U));
+  const std::uint64_t value = crc.Value();
+  for (std::size_t index = 0U; index < 8U; ++index) {
+    high[index] = static_cast<std::uint8_t>(value >> ((7U - index) * 8U));
+  }
+
+  REQUIRE(receiver.Check(MessageId(0x12340001U), kUpperHeader,
+                         osp::span<const std::uint8_t>(high.data(), size)).ok);
+  REQUIRE(receiver.Check(MessageId(0x12340001U), kUpperHeader,
+                         osp::span<const std::uint8_t>(low.data(), size)).ok);
+}

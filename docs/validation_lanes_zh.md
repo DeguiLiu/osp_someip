@@ -21,7 +21,7 @@ setarch $(uname -m) -R env ASAN_OPTIONS=detect_leaks=1 ./build-asan/tests/someip
 ./build/tests/someip_no_alloc          # exit 0 表示零分配
 ```
 
-验收：137 个用例 / 12938 条断言全过；sanitizer 无报告；零分配进程返回 0；
+验收：142 个用例 / 36966 条断言全过；sanitizer 无报告；零分配进程返回 0；
 `someip_headers_self_contained` 把 26 个公开头文件逐个单独编译，全部通过。
 
 E2E Profile 4 的 CRC 另外做过一次交叉核对：用临时程序把 vsomeip 的 `crc.cpp` 与
@@ -54,10 +54,10 @@ OSP_GITHUB_MIRROR=https://ghfast.top/ cmake -S . -B /tmp/fetch-check \
 cmake --build /tmp/fetch-check -j8 && ctest --test-dir /tmp/fetch-check
 ```
 
-结果 141 项全过。这条路径验证的是 `FetchContent` 拉下来的 newosp main 与本地同级目录等价。
+结果 146 项全过。这条路径验证的是 `FetchContent` 拉下来的 newosp main 与本地同级目录等价。
 
 发布状态复核：从 Gitee 重新 `git clone --depth 1` 到空目录，`cmake --preset host-debug
--DSOMEIP_FETCH_NEWOSP=ON` 后构建，141 项全过（137 个用例、12938 条断言）。仓库自包含，不依赖任何未提交文件。
+-DSOMEIP_FETCH_NEWOSP=ON` 后构建，146 项全过（142 个用例、36966 条断言）。仓库自包含，不依赖任何未提交文件。
 
 跨实现互通（已验证，双向）：
 
@@ -176,7 +176,7 @@ cmake --build build/aarch64 -j8 && ctest --test-dir build/aarch64
 
 两条路径都在本机各跑过一遍：133 项，1 项跳过（组播），其余全过。
 
-结果：136 个用例通过，1 个跳过（组播），`someip_loopback_bench` 为
+结果：141 个用例通过，1 个跳过（组播），`someip_loopback_bench` 为
 p50 11 µs、p99 24 µs、约 6.6 万次请求/秒。这是 qemu 用户态模拟，不是板上数据。
 
 两个示例程序也在 qemu 下跑通了完整链路（等同板上冒烟的命令）：

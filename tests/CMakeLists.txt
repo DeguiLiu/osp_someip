@@ -66,6 +66,7 @@ add_executable(someip_tests
     test_e2e_profile1.cpp
     test_e2e_profile4.cpp
     test_e2e_profile7.cpp
+    test_e2e_fuzz.cpp
     test_sd_fuzz.cpp
     test_owned_payload.cpp
 )

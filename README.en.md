@@ -47,8 +47,8 @@ cmake --build --preset host-debug -j8
 ctest --preset host-debug
 ```
 
-On the host, 137 test cases with 12938 assertions pass; the `noexc` and ASan + UBSan builds pass
-separately. An aarch64 cross build runs 136 cases under qemu with one skip, the multicast case that
+On the host, 142 test cases with 36966 assertions pass; the `noexc` and ASan + UBSan builds pass
+separately. An aarch64 cross build runs 141 cases under qemu with one skip, the multicast case that
 needs a real NIC. A 3000-round-trip RPC benchmark over loopback gives p50 5 us and p99 9-12 us,
 about 160k requests per second on x86, and p50 11 us with p99 24 us, about 66k requests per second,
 on aarch64 under qemu. See `docs/benchmark_report_zh.md`.
