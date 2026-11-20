@@ -33,6 +33,9 @@ if(NOT CMAKE_CROSSCOMPILING)
     add_test(NAME someip_headers_self_contained
         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_headers.sh
                 ${CMAKE_CXX_COMPILER} ${CMAKE_SOURCE_DIR}/include ${OSP_INCLUDE_DIR})
+    add_test(NAME someip_rtthread_core_headers
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_rtthread.sh
+                ${CMAKE_CXX_COMPILER} ${OSP_INCLUDE_DIR})
 endif()
 
 add_executable(someip_tests

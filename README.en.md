@@ -168,6 +168,8 @@ docs/               design, validation, benchmark and static-analysis notes
 - vsomeip 3.4.10 interop passes in both directions. The two stacks run in separate network
   namespaces joined by a veth pair, so Docker is not needed; see `tools/vsomeip_interop.sh` and
   `docs/validation_lanes_zh.md`.
+- RT-Thread: the 24 core headers compile with `-DOSP_PLATFORM_RTTHREAD=1` against a stub
+  `rtthread.h`; the socket layer and runtime are not verified on hardware.
 - SOME/IP-TP tracks 16-byte units, so segments may arrive in any order; overlapping segments are
   dropped. E2E ships Profile 1 only, not Profile 2/4/5/7.
 

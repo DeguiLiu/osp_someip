@@ -176,7 +176,27 @@ qemu-aarch64 -L "$AARCH64_TOOLCHAIN_ROOT/usr/aarch64-linux-gnu" \
 
 真实板卡仍未验证：需要一块 aarch64 板子，把上面的命令换成板卡 IP 与 `tools/sd_probe.py`。
 
-## 5. 通道状态总表
+## 5. RT-Thread 编译检查（桩 SDK，已执行）
+
+没有 RT-Thread SDK 与板卡，因此只做到编译期检查：`tools/rtthread_stub/rtthread.h` 声明
+newosp 平台层用到的几个符号（`rt_tick_get`、`rt_thread_*`、`RT_TICK_PER_SECOND` 等），
+然后用 `-DOSP_PLATFORM_RTTHREAD=1 -DOSP_HAS_NETWORK=0` 编译 24 个与 socket 无关的核心头文件。
+
+```bash
+tools/check_rtthread.sh g++ ../newosp/include
+# 或：ctest --test-dir build/host-debug -R someip_rtthread_core_headers
+```
+
+结果：24 个头文件在 `-fno-exceptions -fno-rtti` 下全部通过。这项检查能发现核心代码
+误用 POSIX 头（`<thread>`、`<chrono>`、`<sys/socket.h>`），但**不能**证明：
+
+- `osp/socket.hpp` 的 lwIP 后端能在 `OSP_NET_BACKEND=1` 下编译（本机没有 lwIP 头文件）；
+- 收发、定时、中断上下文下的行为；
+- 栈与中断占用。
+
+这些都需要 RT-Thread SDK 与板子，和板级实测一并列为待办。
+
+## 6. 通道状态总表
 
 | 通道 | 状态 | 阻塞原因 |
 |---|---|---|
@@ -188,3 +208,4 @@ qemu-aarch64 -L "$AARCH64_TOOLCHAIN_ROOT/usr/aarch64-linux-gnu" \
 | vsomeip 互操作（netns + veth） | 完成 | 双向通过，见第 3 节 |
 | vsomeip 容器方式 | 未执行 | 用户不在 docker 组，已被 netns 方式替代 |
 | ARM 板卡冒烟 | 待执行 | 没有目标板 |
+| RT-Thread 核心头文件编译 | 完成（桩 SDK） | 24 个核心头文件通过；socket 与运行时未验证 |
