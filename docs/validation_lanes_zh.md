@@ -34,6 +34,9 @@ cmake --build /tmp/fetch-check -j8 && ctest --test-dir /tmp/fetch-check
 
 结果 121 项全过。这条路径验证的是 `FetchContent` 拉下来的 newosp main 与本地同级目录等价。
 
+发布状态复核：从 Gitee 重新 `git clone --depth 1` 到空目录，`cmake --preset host-debug
+-DSOMEIP_FETCH_NEWOSP=ON` 后构建，121 项全过。仓库自包含，不依赖任何未提交文件。
+
 跨实现互通（已验证，双向）：
 
 ```bash
