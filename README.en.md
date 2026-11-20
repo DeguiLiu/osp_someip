@@ -24,7 +24,8 @@ third-party interop are covered in "Status and limits".
 - RPC: `RequestHandler` is bound at compile time; requests are dispatched synchronously and answered
   with a Response or an Error. Fire-and-forget calls are supported.
 - E2E: policy template with Protect on send and Check on receive; failed checks drop the message.
-  The default `NoE2E` costs nothing; Profile 1 (CRC-8 SAE J1850, 4-bit counter, data ID) is built in.
+  The default `NoE2E` costs nothing; Profile 1 (CRC-8 SAE J1850, 4-bit counter, data ID) and
+  Profile 4 (CRC-32/AUTOSAR, 16-bit counter, data ID) are built in.
 - Memory: capacities are template parameters, parse results are views over caller-owned buffers, and
   the whole path avoids heap allocation. A default server instance is about 2.1 KB, a client about
   2.7 KB; TP reassembly adds its own buffer.
@@ -46,8 +47,8 @@ cmake --build --preset host-debug -j8
 ctest --preset host-debug
 ```
 
-On the host, 127 test cases with 12884 assertions pass; the `noexc` and ASan + UBSan builds pass
-separately. An aarch64 cross build runs 126 cases under qemu with one skip, the multicast case that
+On the host, 132 test cases with 12912 assertions pass; the `noexc` and ASan + UBSan builds pass
+separately. An aarch64 cross build runs 131 cases under qemu with one skip, the multicast case that
 needs a real NIC. A 3000-round-trip RPC benchmark over loopback gives p50 5 us and p99 9-12 us,
 about 160k requests per second on x86, and p50 11 us with p99 24 us, about 66k requests per second,
 on aarch64 under qemu. See `docs/benchmark_report_zh.md`.
@@ -172,7 +173,7 @@ docs/               design, validation, benchmark and static-analysis notes
   `rtthread.h`, and the lwIP backend (`OSP_NET_BACKEND=1`) type-checks against lwIP 2.2.0
   headers with no warnings; runtime behaviour on a board is still unverified.
 - SOME/IP-TP tracks 16-byte units, so segments may arrive in any order; overlapping segments are
-  dropped. E2E ships Profile 1 only, not Profile 2/4/5/7.
+  dropped. E2E ships Profiles 1 and 4, not 2/5/7.
 
 ## Documentation
 

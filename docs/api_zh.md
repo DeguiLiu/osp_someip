@@ -142,6 +142,7 @@ class Client;
 | `NoTpReassembly` | 默认策略，不占内存 |
 | `NoE2E` | 默认策略，`Check` 不适用、`Protect` 原样返回 |
 | `E2EProfile1<DataId>` | 前置 2 字节头：计数器 + CRC-8/SAE-J1850；`Protect` 需要缓冲区预留两字节 |
+| `E2EProfile4<DataId, Instance, MaxDeltaCounter>` | 前置 12 字节头：长度 + 计数器 + 数据 ID + CRC-32/AUTOSAR；预留 12 字节 |
 | `Crc8SaeJ1850` | 可单独使用的 CRC 计算器 |
 
 把策略接进 Server/Client 只需换模板参数：

@@ -8,10 +8,10 @@
 
 | 范围内 | 范围外 |
 |---|---|
-| SOME/IP 头、消息、SD entry/option 编解码 | E2E Profile 2/4/5/7 |
+| SOME/IP 头、消息、SD entry/option 编解码 | E2E Profile 2/5/7 |
 | SOME/IP-TP 分段头与定容重组（含乱序） | SOME/IP-TP 重叠分段容忍 |
 | 服务端 offer/stop-offer、事件发布、订阅管理 | mTLS 与安全传输 |
-| E2E 钩子与 Profile 1（CRC-8 + 计数器） | 动态分配、vtable 多态、工厂模式 |
+| E2E 钩子与 Profile 1/4 | 动态分配、vtable 多态、工厂模式 |
 | 客户端发现缓存、订阅、请求-响应匹配 | TLS/mTLS 与安全传输 |
 | 定容、零分配、无异常的错误模型 | 动态分配、vtable 多态、工厂模式 |
 
@@ -159,12 +159,18 @@ payload / 源端点` 组一个 `IncomingRequest` 交给 `OnRequest`；处理器�
 判定失败直接丢弃，通过后把去掉保护尾的载荷视图交给处理器。策略在编译期绑定，
 未启用时没有分支残留。
 
-### 3.12 内置 Profile 1
+### 3.12 内置 E2E Profile
 
-`E2EProfile1<DataId>` 实现 AUTOSAR Profile 1 的线格式：保护载荷前两个字节是计数器和 CRC，
-CRC-8 采用 SAE J1850 参数（poly 0x1D、init 0xFF、终值异或 0xFF），覆盖 16 位数据 ID、
-计数器、置零的 CRC 字节和后续数据。`Protect` 先用 `memmove` 把载荷后移两个字节再写头，
-因此调用方必须预留两字节空间；`Check` 校验 CRC 并比较计数器，重复计数按重放处理。
+`E2EProfile1<DataId>`：载荷前两个字节是计数器和 CRC，CRC-8 采用 SAE J1850 参数
+（poly 0x1D、init 0xFF、终值异或 0xFF），覆盖 16 位数据 ID、计数器、置零的 CRC 字节和后续数据。
+
+`E2EProfile4<DataId, Instance, MaxDeltaCounter>`：载荷前 12 字节依次是总长度、16 位计数器、
+32 位数据 ID（高字节为实例）和 CRC-32；CRC 覆盖前 8 字节与 CRC 之后的全部数据，算法为
+CRC-32/AUTOSAR（poly 0xF4ACFB13，反射形式 0xC8DF352F，init 与终值异或均为 0xFFFFFFFF），
+标准校验值 0x1697D06A 已写进测试。计数器按窗口判定：重复值（差 0）与超过 `MaxDeltaCounter`
+的跳变都丢弃。
+
+两者都用 `memmove` 在缓冲区头部插入保护头，因此调用方必须预留对应空间。
 
 ### 3.13 SOME/IP-TP 重组
 
@@ -185,9 +191,9 @@ CRC-8 采用 SAE J1850 参数（poly 0x1D、init 0xFF、终值异或 0xFF），�
 | L2 互操作 | 与 vsomeip 容器对端做 RPC、通知、订阅 | 双向收发一致 |
 | L3 目标 | ARM Linux / RT-Thread 构建与静态内存报告 | 无堆、尺寸达标 |
 
-当前 L0/L1 结果：127 个用例、12884 条断言（含 SD 变异扫描与 4000 轮 TP 分段扫描），外加零分配见证进程；
+当前 L0/L1 结果：132 个用例、12912 条断言（含 SD 变异扫描与 4000 轮 TP 分段扫描），外加零分配见证进程；
 普通构建、`-fno-exceptions -fno-rtti` 构建与 ASan+UBSan 构建均通过。L2 的组播在真实网卡
-（`ens192`）上验证；L3 完成 aarch64 交叉构建与 qemu 运行，126 过、1 跳过。
+（`ens192`）上验证；L3 完成 aarch64 交叉构建与 qemu 运行，131 过、1 跳过。
 
 ## 5. 里程碑与风险
 

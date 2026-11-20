@@ -64,6 +64,7 @@ add_executable(someip_tests
     test_client_server_loopback.cpp
     test_e2e.cpp
     test_e2e_profile1.cpp
+    test_e2e_profile4.cpp
     test_sd_fuzz.cpp
     test_owned_payload.cpp
 )
