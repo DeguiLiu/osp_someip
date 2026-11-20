@@ -87,6 +87,16 @@ inline osp::expected<std::uint32_t, Error> BuildStopOfferServiceDatagram(
   return detail::BuildServiceDatagram(out, request, session, true);
 }
 
+/// @brief Encode one FindService datagram with the wildcard any-instance fields.
+inline osp::expected<std::uint32_t, Error> BuildFindServiceDatagram(
+    osp::span<std::uint8_t> out, std::uint16_t service_id, sd::SdSession session) noexcept {
+  const sd::Entry entries[1] = {sd::Entry::Find(sd::ServiceEntry::Find(service_id))};
+  const sd::Options none[1] = {
+      sd::Options::Configuration(osp::span<const std::uint8_t>())};
+  return detail::WriteDatagram(out, osp::make_span(entries),
+                               osp::span<const sd::Options>(none, 0U), session);
+}
+
 /// @brief Encode one SubscribeEventGroup datagram; returns its byte length.
 inline osp::expected<std::uint32_t, Error> BuildSubscribeEventGroupDatagram(
     osp::span<std::uint8_t> out, const SubscribeEventGroupRequest& request,

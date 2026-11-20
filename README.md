@@ -1,8 +1,9 @@
 # osp-someip
 
 面向嵌入式 Linux 与 RT-Thread 的 SOME/IP 协议栈，C++17 头文件库，基于 newosp 框架。
-当前完成 M0 与 M1：SOME/IP 线格式、消息遍历、Service Discovery 编解码（含零拷贝解析）
-与三种数据报构建器，全部通过字节级 golden 测试；服务端与客户端为下一阶段。
+当前完成 M0–M2 核心：SOME/IP 线格式、消息遍历、Service Discovery 编解码与零拷贝解析、
+数据报构建器，以及不依赖 socket 的服务端（offer 重播、订阅管理、事件发布）。
+客户端与真实网卡接入为下一阶段。
 
 ## 结论先行
 
@@ -13,7 +14,9 @@
 | 多态 | CRTP 静态多态，无 vtable、无工厂、无动态池 |
 | 线格式 | Header / Message / Opaque payload 已实现（M0） |
 | Service Discovery | entry / option / header 编解码、数据报构建器、零拷贝解析（M1） |
-| 测试 | 74 个用例、1155 条断言，普通构建与无异常构建均通过 |
+| 服务端 | offer/stop-offer、find 应答、订阅槽表、事件发布、TTL 到期与 offer 重播（M2） |
+| 零堆 | 全局 `operator new` 计数见证进程，完整场景 0 次分配 |
+| 测试 | 80 个用例、1212 条断言，普通构建与无异常构建均通过 |
 
 ## 目录结构
 
@@ -29,6 +32,9 @@ include/osp/someip/
   return_code.hpp     返回码（命名码、通用区间、接口区间）
   sd/                 SD 类型、entry/option 编解码与视图、header、会话计数
   sd_codec.hpp        Offer / StopOffer / Subscribe / Ack 数据报构建器
+  server.hpp          服务端：offer 槽表、订阅槽表、事件发布（模板容量）
+  endpoint.hpp        IPv4 端点与 SD 组播默认值
+  service_instance.hpp 服务标识（service / instance / major）
 tests/                Catch2 测试，含手工推导的线格式 golden
 docs/                 设计文档与参考实现清单
 ```
@@ -59,6 +65,9 @@ newosp 头文件默认取 `../newosp/include`，可用 `-DOSP_INCLUDE_DIR=<path>
 3. `HeaderView` / `MessageView` 是 caller-owned 缓冲上的视图，解析零拷贝；`Header` / `Message<P>`
    是可编码的值类型，长度字段在构造时由载荷长度推出。
 4. 数据报遍历器跳过 SOME/IP-TP 分段并计数，遇到畸形消息时把剩余字节原样交出。
+5. 服务端把发送通道作为模板参数注入（`Server<Sink, ...>`），编解码与发送都在编译期绑定，
+   没有 `std::function`、没有 vtable、没有堆；`tests/no_alloc_witness.cpp` 用全局
+   `operator new` 计数守护这一点。
 
 详见 [docs/design_zh.md](docs/design_zh.md)，参考实现清单见
 [docs/reference_projects_zh.md](docs/reference_projects_zh.md)。

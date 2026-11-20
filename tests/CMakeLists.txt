@@ -16,6 +16,15 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(Catch2)
 include(Catch)
 
+# Compile-only guard: every header, including the server template, must build
+# under the interface flags (notably -fno-exceptions -fno-rtti when enabled).
+add_library(someip_header_smoke OBJECT header_smoke.cpp)
+target_link_libraries(someip_header_smoke PRIVATE osp_someip)
+
+add_executable(someip_no_alloc no_alloc_witness.cpp)
+target_link_libraries(someip_no_alloc PRIVATE osp_someip)
+add_test(NAME someip_no_alloc COMMAND someip_no_alloc)
+
 add_executable(someip_tests
     test_message_id.cpp
     test_message_type.cpp
@@ -27,6 +36,7 @@ add_executable(someip_tests
     test_sd_options.cpp
     test_sd_header.cpp
     test_sd_parse.cpp
+    test_server.cpp
 )
 target_link_libraries(someip_tests Catch2::Catch2WithMain osp_someip)
 

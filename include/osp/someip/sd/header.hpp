@@ -219,6 +219,21 @@ class SdHeaderView final {
   /// @brief Next option; the section was validated by Parse().
   bool NextOption(OptionView& out) noexcept { return options_.Next(out); }
 
+  /// @brief Option at a flat index, as referenced by an entry's options run.
+  bool OptionAt(std::uint32_t index, OptionView& out) const noexcept {
+    OptionWalker walker(options_bytes_);
+    OptionView view;
+    std::uint32_t current = 0U;
+    while (walker.Next(view)) {
+      if (current == index) {
+        out = view;
+        return true;
+      }
+      ++current;
+    }
+    return false;
+  }
+
  private:
   Error ValidateOptions() noexcept {
     Error err = Error::None();

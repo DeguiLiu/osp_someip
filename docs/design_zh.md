@@ -93,6 +93,18 @@ SD 解析沿用同一模式：`EntryView` 固定 16 字节、`OptionView` 按长
 服务/方法 ID、消息类型、返回码都是强类型值对象，构造即校验；返回码保留"命名 / 通用 / 接口"
 三段区间，相等性同时比较区间与字节，避免把 `Ok` 与 `Generic(0x00)` 当成同一个值。
 
+### 3.6 静态注入与零堆
+
+服务端不持有 socket，也不做运行期类型擦除：发送通道是模板参数
+`Server<Sink, MaxOffers, MaxSubscribers, MaxDatagram>`，`Sink` 在编译期绑定，调用点就是
+`sink_(datagram, endpoint)`。因此没有 `std::function`、没有 vtable，也没有为回调分配的内存。
+
+所有容器都是定容数组，唯一的"裸存储"是 `osp::expected` 内部的 `aligned_storage` +
+placement new（`vocabulary.hpp`）；本仓库不直接使用 `new`、`delete`、`malloc`。
+`tests/no_alloc_witness.cpp` 覆盖 offer → find → subscribe → publish → tick 全链路，
+替换全局 `operator new` 后要求分配计数为 0，任何后续引入的 `std::vector` / `std::string`
+会直接让该进程返回非零。
+
 ## 4. 验证策略
 
 | 层级 | 内容 | 判定 |
@@ -102,7 +114,8 @@ SD 解析沿用同一模式：`EntryView` 固定 16 字节、`OptionView` 按长
 | L2 互操作 | 与 vsomeip 容器对端做 RPC、通知、订阅 | 双向收发一致 |
 | L3 目标 | ARM Linux / RT-Thread 构建与静态内存报告 | 无堆、尺寸达标 |
 
-当前 L0 结果：74 个用例、1155 条断言；普通构建与 `-fno-exceptions -fno-rtti` 构建均通过。
+当前 L0 结果：80 个用例、1212 条断言，外加零分配见证进程；普通构建与
+`-fno-exceptions -fno-rtti` 构建均通过。
 
 ## 5. 里程碑与风险
 
@@ -110,7 +123,7 @@ SD 解析沿用同一模式：`EntryView` 固定 16 字节、`OptionView` 按长
 |---|---|---|
 | M0（完成） | header/message/walker + 3 条 golden | 无 |
 | M1（完成） | SD entry/option/header 编解码、零拷贝解析、数据报构建器 | option 长度与 entry 计数边界 |
-| M2 | 服务端 offer、事件发布、订阅槽表 | 订阅 TTL 与重播时序 |
+| M2（核心完成） | 服务端 offer/stop-offer、find 应答、订阅槽表、事件发布、TTL 与重播 | 订阅 TTL 与重播时序 |
 | M3 | 客户端发现、RPC 匹配、超时重传 | 与 vsomeip 的行为差异 |
 | M4 | newosp 接入、ARM 实测、shell 命令 | 目标板与工具链可用性 |
 

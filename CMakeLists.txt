@@ -23,6 +23,11 @@ target_compile_features(osp_someip INTERFACE cxx_std_17)
 target_compile_options(osp_someip INTERFACE
     -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
 
+if(SOMEIP_NO_EXCEPTIONS)
+    # Applies to every consumer of the header-only library, not just tests.
+    target_compile_options(osp_someip INTERFACE -fno-exceptions -fno-rtti)
+endif()
+
 if(SOMEIP_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
