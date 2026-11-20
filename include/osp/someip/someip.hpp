@@ -9,6 +9,7 @@
 #include "osp/someip/client.hpp"
 #include "osp/someip/e2e.hpp"
 #include "osp/someip/e2e_profile1.hpp"
+#include "osp/someip/e2e_profile2.hpp"
 #include "osp/someip/e2e_profile4.hpp"
 #include "osp/someip/e2e_profile5.hpp"
 #include "osp/someip/e2e_profile7.hpp"

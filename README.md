@@ -23,8 +23,8 @@ SOME/IP 协议栈，C++17 头文件库，面向嵌入式 Linux 与 RT-Thread，�
 - RPC：`RequestHandler` 在编译期绑定，同步分发请求，自动回 Response 或 Error，支持
   fire-and-forget。
 - E2E：策略模板，发送前 Protect、接收时 Check，校验失败丢弃；默认 `NoE2E`，不产生开销。
-  内置 Profile 1（CRC-8 SAE J1850）、Profile 4（CRC-32/AUTOSAR）、Profile 5
-  （CRC-16/CCITT-FALSE + 8 位计数器）与 Profile 7（CRC-64/XZ）。
+  内置 Profile 1（CRC-8 SAE J1850）、Profile 2（CRC-8/H2F + 计数器状态机）、
+  Profile 4（CRC-32/AUTOSAR）、Profile 5（CRC-16/CCITT-FALSE）与 Profile 7（CRC-64/XZ）。
 - 内存：容器容量由模板参数给定，解析结果是调用方缓冲区上的视图，全链路不分配堆内存。
   默认服务端实例约 2.1 KB、客户端约 2.7 KB，TP 重组按容量另算。
 - 构建：`-fno-exceptions -fno-rtti` 下可用。
@@ -45,7 +45,7 @@ cmake --build --preset host-debug -j8
 ctest --preset host-debug
 ```
 
-主机上 148 个用例、44989 条断言通过；`noexc` 与 ASan + UBSan 两组构建另行跑通。
+主机上 154 个用例、53032 条断言通过；`noexc` 与 ASan + UBSan 两组构建另行跑通。
 aarch64 交叉构建后在 qemu 下 113 过、1 跳过（组播用例需要真机网卡）。
 x86 回环 3000 次 RPC 往返，p50 5 µs、p99 9–12 µs，约 16 万次请求/秒；
 aarch64（qemu）同一基准 p50 11 µs、p99 24 µs，约 6.6 万次请求/秒。
@@ -174,8 +174,8 @@ docs/              设计、验证、基准、静态分析文档
   lwIP 后端（`OSP_NET_BACKEND=1`）对 lwIP 2.2.0 头文件零告警通过类型检查；
   实机收发与运行时仍未验证。
 - SOME/IP-TP 按 16 字节单元记录到达情况，乱序可重组，重叠分段丢弃；E2E 只带 Profile 1，
-  没有 Profile 2：它的校验是按周期推进的状态机（INITIAL/SYNC/REPEATED/WRONGSEQUENCE），
-  当前“一条报文进、一个 ok/error 出”的钩子表达不了，需要先改接口。
+  Profile 2 是按周期推进的状态机：数据到达时调 `Check()`，某周期没有数据时调一次 `Cycle()`；
+  状态经 `E2ECheck::status` 暴露（kRepeated / kOkSomeLost / kSync / kWrongSequence）。
 - 参考实现只用于核对行为，不复制其代码。
 
 ## 文档

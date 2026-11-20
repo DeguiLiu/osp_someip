@@ -34,9 +34,9 @@ def parse_args():
     parser.add_argument("--skip-request", action="store_true")
     parser.add_argument(
         "--e2e",
-        choices=("none", "p1", "p4", "p5", "p7"),
+        choices=("none", "p1", "p2", "p4", "p5", "p7"),
         default="none",
-        help="protect requests and replies with E2E Profile 1/4/5/7 (data ID 0x1234)",
+        help="protect requests and replies with E2E Profile 1/2/4/5/7 (data ID 0x1234)",
     )
     parser.add_argument(
         "--tp-chunk",
@@ -118,6 +118,15 @@ def crc8_sae_j1850(data):
     return crc ^ 0xFF
 
 
+def crc8_h2f(data):
+    crc = 0xFF
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x2F) & 0xFF if crc & 0x80 else (crc << 1) & 0xFF
+    return crc ^ 0xFF
+
+
 def crc32_autosar(data):
     crc = 0xFFFFFFFF
     for byte in data:
@@ -152,6 +161,15 @@ def e2e_protect(payload, profile="p1"):
         E2E_COUNTER[0] = (E2E_COUNTER[0] + 1) & 0x0F
         crc = crc8_sae_j1850(E2E_DATA_ID + bytes([counter, 0]) + payload)
         return bytes([counter, crc]) + payload
+    if profile == "p2":
+        counter = E2E_COUNTER[0] & 0x0F
+        E2E_COUNTER[0] = (E2E_COUNTER[0] + 1) & 0x0F
+        if counter == 0:
+            counter = 1  # Profile 2 starts at one
+            E2E_COUNTER[0] = 2
+        data_id = bytes([0x10 + counter])
+        crc = crc8_h2f(bytes([counter]) + payload + data_id)
+        return bytes([crc, counter]) + payload
     if profile == "p4":
         counter = E2E_COUNTER[0] & 0xFFFF
         E2E_COUNTER[0] = (E2E_COUNTER[0] + 1) & 0xFFFF
@@ -178,6 +196,13 @@ def e2e_check(body, profile="p1"):
         counter = body[0] & 0x0F
         expected = crc8_sae_j1850(E2E_DATA_ID + bytes([counter, 0]) + body[2:])
         return expected == body[1], body[2:], counter
+    if profile == "p2":
+        if len(body) < 2:
+            return False, b"", 0
+        counter = body[1] & 0x0F
+        data_id = bytes([0x10 + counter])
+        expected = crc8_h2f(bytes([counter]) + body[2:] + data_id)
+        return expected == body[0], body[2:], counter
     if profile == "p4":
         if len(body) < 12:
             return False, b"", 0

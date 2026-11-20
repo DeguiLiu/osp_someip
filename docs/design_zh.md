@@ -8,10 +8,10 @@
 
 | 范围内 | 范围外 |
 |---|---|
-| SOME/IP 头、消息、SD entry/option 编解码 | E2E Profile 2 |
+| SOME/IP 头、消息、SD entry/option 编解码 | SOME/IP over TCP |
 | SOME/IP-TP 分段头与定容重组（含乱序） | SOME/IP-TP 重叠分段容忍 |
 | 服务端 offer/stop-offer、事件发布、订阅管理 | mTLS 与安全传输 |
-| E2E 钩子与 Profile 1/4/5/7 | 动态分配、vtable 多态、工厂模式 |
+| E2E 钩子与 Profile 1/2/4/5/7 | 动态分配、vtable 多态、工厂模式 |
 | 客户端发现缓存、订阅、请求-响应匹配 | TLS/mTLS 与安全传输 |
 | 定容、零分配、无异常的错误模型 | 动态分配、vtable 多态、工厂模式 |
 
@@ -182,12 +182,11 @@ CRC-32/AUTOSAR（poly 0xF4ACFB13，反射形式 0xC8DF352F，init 与终值异�
 
 它们都用 `memmove` 在缓冲区头部插入保护头，因此调用方必须预留对应空间。
 
-Profile 2 没有实现，原因不是缺 CRC，而是校验模型不同。AUTOSAR 的 `E2E_P02Check` 是一个
-按周期推进的状态机：维护 `LastValidCounter`、`SyncCounter`、`NoNewOrRepeatedDataCounter`，
-并区分 INITIAL / OK / OKSOMELOST / REPEATED / SYNC / WRONGSEQUENCE 六种结果；应用还要在每个
-周期告诉它“本轮有没有新数据”。本库的钩子是“一条报文进、一个 ok/error 出”，既表达不了这些
-状态，也没有周期概念。要支持 Profile 2，需要先把 `E2ECheck` 扩展成带状态枚举与周期推进的接口，
-再让 `Server` / `Client` 按状态决定投递还是丢弃——这是接口级改动，不应在只补 profile 时顺手做。
+`E2EProfile2<Ids, MaxDeltaCounterInit, MaxNoNewOrRepeatedData, SyncCounterInit>`：前两字节是
+CRC-8/H2F 与 4 位计数器，CRC 覆盖计数器字节、载荷与按计数器选取的一字节数据 ID；计数器从 1 开始。
+与其它 profile 不同，它是按周期推进的状态机，`E2ECheck` 已扩展出 `kRepeated`、`kOkSomeLost`、
+`kSync`、`kWrongSequence`、`kNoData` 表示 AUTOSAR 的六种结果。数据到达时调 `Check()`；
+某个周期没有数据时，应用需调一次 `Cycle()`。
 
 ### 3.13 SOME/IP-TP 重组
 
@@ -208,9 +207,9 @@ Profile 2 没有实现，原因不是缺 CRC，而是校验模型不同。AUTOSA
 | L2 互操作 | 与 vsomeip 容器对端做 RPC、通知、订阅 | 双向收发一致 |
 | L3 目标 | ARM Linux / RT-Thread 构建与静态内存报告 | 无堆、尺寸达标 |
 
-当前 L0/L1 结果：148 个用例、44989 条断言（含 SD 变异扫描、4000 轮 TP 分段扫描与四套 E2E 的 2000 轮随机扫描），外加零分配见证进程；
+当前 L0/L1 结果：154 个用例、53032 条断言（含 SD 变异扫描、4000 轮 TP 分段扫描与五套 E2E 的 2000 轮随机扫描），外加零分配见证进程；
 普通构建、`-fno-exceptions -fno-rtti` 构建与 ASan+UBSan 构建均通过。L2 的组播在真实网卡
-（`ens192`）上验证；L3 完成 aarch64 交叉构建与 qemu 运行，146 过、1 跳过。
+（`ens192`）上验证；L3 完成 aarch64 交叉构建与 qemu 运行，153 过、1 跳过。
 
 ## 5. 里程碑与风险
 

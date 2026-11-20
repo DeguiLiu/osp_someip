@@ -142,6 +142,7 @@ class Client;
 | `NoTpReassembly` | 默认策略，不占内存 |
 | `NoE2E` | 默认策略，`Check` 不适用、`Protect` 原样返回 |
 | `E2EProfile1<DataId>` | 前置 2 字节头：计数器 + CRC-8/SAE-J1850；`Protect` 需要缓冲区预留两字节 |
+| `E2EProfile2<Ids, MaxDeltaCounterInit, MaxNoNewOrRepeatedData, SyncCounterInit>` | 前 2 字节：CRC-8/H2F + 4 位计数器；按周期推进，缺数据的周期调 `Cycle()` |
 | `E2EProfile4<DataId, Instance, MaxDeltaCounter>` | 前置 12 字节头：长度 + 计数器 + 数据 ID + CRC-32/AUTOSAR；预留 12 字节 |
 | `E2EProfile5<DataId, MaxDeltaCounter>` | 前置 3 字节头：CRC-16/CCITT-FALSE + 8 位计数器；预留 3 字节 |
 | `E2EProfile7<DataId, MaxDeltaCounter>` | 前置 20 字节头：CRC-64/XZ + 长度 + 计数器 + 数据 ID；预留 20 字节 |

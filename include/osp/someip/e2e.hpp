@@ -23,6 +23,16 @@ enum class E2EStatus : std::uint8_t {
   kNotChecked = 0U,
   kOk,
   kError,
+  /// Counter repeated: the same message arrived twice (Profile 2).
+  kRepeated,
+  /// Counter advanced past a gap inside the window (Profile 2).
+  kOkSomeLost,
+  /// Receiver is resynchronising; the data is not usable yet (Profile 2).
+  kSync,
+  /// Counter outside the window (Profile 2).
+  kWrongSequence,
+  /// No data arrived in this cycle (Profile 2).
+  kNoData,
 };
 
 /// @brief What a check found: whether it applied, whether it passed, and the payload to use.

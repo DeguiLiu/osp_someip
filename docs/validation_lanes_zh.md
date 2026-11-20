@@ -21,13 +21,17 @@ setarch $(uname -m) -R env ASAN_OPTIONS=detect_leaks=1 ./build-asan/tests/someip
 ./build/tests/someip_no_alloc          # exit 0 表示零分配
 ```
 
-验收：148 个用例 / 44989 条断言全过；sanitizer 无报告；零分配进程返回 0；
+验收：154 个用例 / 53032 条断言全过；sanitizer 无报告；零分配进程返回 0；
 `someip_headers_self_contained` 把 26 个公开头文件逐个单独编译，全部通过。
 
 E2E Profile 4 的 CRC 另外做过一次交叉核对：用临时程序把 vsomeip 的 `crc.cpp` 与
 `profile_04.cpp` 编进同一个进程，对 1000 组随机缓冲比较
 `profile_04::compute_crc` 与 `Crc32Autosar` 的结果，差异为 0。该程序没有入库，也不作
 测试 oracle；仓库里的期望值仍然只用标准目录的校验值 `0x1697D06A`。
+
+Profile 2 与 AUTOSAR 官方 C 实现（`AUTOSAR/capi` 的 `E2E_P02.c` + `Crc.c`）做过交叉核对：
+11 条消息的 Protect 输出逐字节一致，8 步接收序列的状态（INITIAL/OK/OKSOMELOST/REPEATED）
+与本实现一一对应；程序未入库。
 
 Profile 7 用同样的办法核对过：把 vsomeip 的 `profile_07.cpp` 与 `protector.cpp` 编进临时程序，
 对同一段载荷比较两者的 36 字节输出，逐字节一致（差异 0）。CRC-64/XZ 的校验值
@@ -54,10 +58,10 @@ OSP_GITHUB_MIRROR=https://ghfast.top/ cmake -S . -B /tmp/fetch-check \
 cmake --build /tmp/fetch-check -j8 && ctest --test-dir /tmp/fetch-check
 ```
 
-结果 152 项全过。这条路径验证的是 `FetchContent` 拉下来的 newosp main 与本地同级目录等价。
+结果 158 项全过。这条路径验证的是 `FetchContent` 拉下来的 newosp main 与本地同级目录等价。
 
 发布状态复核：从 Gitee 重新 `git clone --depth 1` 到空目录，`cmake --preset host-debug
--DSOMEIP_FETCH_NEWOSP=ON` 后构建，152 项全过（148 个用例、44989 条断言）。仓库自包含，不依赖任何未提交文件。
+-DSOMEIP_FETCH_NEWOSP=ON` 后构建，158 项全过（154 个用例、53032 条断言）。仓库自包含，不依赖任何未提交文件。
 
 跨实现互通（已验证，双向）：
 
@@ -72,12 +76,12 @@ python3 tools/sd_probe.py --mode server --service 1234 --seconds 6 &
     --port 30510 --service 1234 --method 0001 --seconds 3
 ```
 
-E2E 互通（Python 探针 ←→ C++ 示例，Profile 1/4/5/7）：
+E2E 互通（Python 探针 ←→ C++ 示例，Profile 1/2/4/5/7）：
 
-示例按 profile 编译成 `someip_e2e1|4|5|7_{server,client}_demo`，探针用同名 `--e2e p1|p4|p5|p7`。
+示例按 profile 编译成 `someip_e2e{1,2,4,5,7}_{server,client}_demo`，探针用同名 `--e2e p1|p2|p4|p5|p7`。
 
 ```bash
-for n in 1 4 5 7; do
+for n in 1 2 4 5 7; do
     ./build-demo/examples/someip_e2e${n}_server_demo --iface 127.0.0.1 --seconds 6 &
     sleep 1
     python3 tools/sd_probe.py --server 127.0.0.1 --service 1234 --method 0001 --e2e p${n}
@@ -90,7 +94,7 @@ python3 tools/sd_probe.py --mode server --service 1234 --seconds 6 --e2e p4 &
     --port 30510 --service 1234 --method 0001 --seconds 4
 ```
 
-实测四个 profile 都是 `e2e check=ok counter=1` 且 `response payload=11223344`；
+实测五个 profile 都是 `e2e check=ok counter=1` 且 `response payload=11223344`；
 反方向探针输出 `e2e check=ok counter=0`，客户端打印 `response 0x00010001, 4 payload bytes`。
 
 两个方向都验证了“保护 → 校验 → 剥离”这条完整路径。注意探针的事件发布不带 E2E，
@@ -257,10 +261,10 @@ tools/arm_vm.sh Image busybox.static \
 
 ```
 KERNEL: Linux 6.6.134-0-virt aarch64
-test cases: 148 | 147 passed | 1 skipped        (组播用例需要真机网卡)
-assertions: 44965 | 44965 passed
+test cases: 154 | 153 passed | 1 skipped        (组播用例需要真机网卡)
+assertions: 53008 | 53008 passed
 TESTS_RC=0
-round_trips=3000 avg=91.3us p50=87us p99=186us rate=10482 req/s
+round_trips=3000 avg=112.4us p50=92us p99=349us rate=8558 req/s
 BENCH_RC=0
 ```
 
@@ -277,7 +281,7 @@ BENCH_RC=0
 DEMO_RC=0
 ```
 
-结果：146 个用例通过，1 个跳过（组播），`someip_loopback_bench` 为
+结果：153 个用例通过，1 个跳过（组播），`someip_loopback_bench` 为
 p50 11 µs、p99 24 µs、约 6.6 万次请求/秒。这是 qemu 用户态模拟，不是板上数据。
 
 两个示例程序也在 qemu 下跑通了完整链路（等同板上冒烟的命令）：

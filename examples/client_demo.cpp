@@ -13,6 +13,7 @@
 #include "osp/log.hpp"
 #include "osp/someip/client.hpp"
 #include "osp/someip/e2e_profile1.hpp"
+#include "osp/someip/e2e_profile2.hpp"
 #include "osp/someip/e2e_profile4.hpp"
 #include "osp/someip/e2e_profile5.hpp"
 #include "osp/someip/e2e_profile7.hpp"
@@ -135,6 +136,9 @@ bool ParseOptions(int argc, char** argv, Options& options) noexcept {
 #if SOMEIP_DEMO_E2E == 1
 /// @brief Same demo with E2E Profile 1 enabled on requests and replies.
 using E2EPolicy = osp::someip::E2EProfile1<0x1234U>;
+#elif SOMEIP_DEMO_E2E == 2
+using E2EPolicy =
+    osp::someip::E2EProfile2<osp::someip::SequentialP2Ids<0x10U>, 15U, 15U, 1U>;
 #elif SOMEIP_DEMO_E2E == 4
 using E2EPolicy = osp::someip::E2EProfile4<0x1234U, 1U, 15U>;
 #elif SOMEIP_DEMO_E2E == 5
