@@ -76,8 +76,9 @@ cmake --build /tmp/fetch-check -j8 && ctest --test-dir /tmp/fetch-check
 
 结果 161 项全过。这条路径验证的是 `FetchContent` 拉下来的 newosp（钉 v0.9.6）与本地同级目录等价。
 
-发布状态复核：从 Gitee 重新 `git clone --depth 1` 到空目录，`cmake --preset host-debug
--DSOMEIP_FETCH_NEWOSP=ON` 后构建，161 项全过（158 个用例、53055 条断言）。仓库自包含，不依赖任何未提交文件。
+发布状态复核（2026-11-21，从 GitHub 远端 `git clone --depth 1` 到空目录）：`cmake --preset
+host-debug -DSOMEIP_FETCH_NEWOSP=ON` 后构建零告警，161 项全过（158 个用例、53055 条断言）。
+仓库自包含，不依赖任何未提交文件。
 
 跨实现互通（已验证，双向）：
 
