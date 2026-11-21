@@ -28,6 +28,7 @@ SOME/IP-TP 重组、E2E Profile 1/2/4/5/7、真实网卡组播与 vsomeip 双向
 | 服务观察 | 有（`with_service_observer`） | 有（`Observer` 模板：远端 offer 可用 / 消失） | 仅上报变化，不缓存给业务 |
 | 客户端发现 / 订阅 / RPC | 有（async，自动续订、重启检测） | 有（回调 + 超时 + 续订 + 可用性 + 重启检测） | 请求 ID 规则一致：client<<16 \| session |
 | E2E 保护 | 仅 `E2EHandle` trait 钩子 | 策略钩子 + 内置 Profile 1/2/4/5/7 | 本项目带五个可直接用的 profile |
+| TCP / IPv6 收发 | 都没有：发送路径强制 `(SocketAddr::V4, TransportProtocol::Udp)`，否则返回 `Error::UnsupportedEndpoint`；SD 层有 `Tcp` 枚举与 IPv6 option 编解码，端点选择是「UDP 优先，无 UDP 则第一个 TCP」；服务端对 TCP+UDP 多端点订阅者明确未支持 | 都没有：SD 层有 `kTcp` 枚举与 IPv6 option 编解码，端点解析按 protocol 过滤、只接受 0x11，无可用项时回退 SD 源地址 | 上游在发送层拒绝，本项目在解析层过滤；两者都不会把 UDP 数据报发往 TCP 端口 |
 | 组播加入 | 有（socket2） | 有（`JoinSdMulticast` + `IP_MULTICAST_IF`） | 本项目已在真实网卡 `ens192` 上验证收发 |
 | 互操作实测（vsomeip） | 有（Docker 容器） | 有（3.4.10，netns + veth，双向） | 本项目不走容器，见验证通道文档 |
 | 金丝雀/无分配见证 | 有 | 有 | 本项目用全局 `operator new` 计数 |

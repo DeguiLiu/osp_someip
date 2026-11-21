@@ -164,6 +164,13 @@ osp::someip::Server<UdpSink, 8U, 16U, 1400U, Echo> server(sink);
 需要澄清一点：线格式层面并没有「不认识」TCP。SD endpoint option 的 protocol 字节有枚举
 （`TransportProtocol::kTcp = 0x06`）与合法性校验，缺的是端点机制，不是解码能力。
 
+上游 Rust 原型也是同一口径，这一点值得单独说：simple_someip 0.15 里没有任何 TCP socket（std 后端是
+`tokio::net::UdpSocket`，bare-metal 后端是 embassy-net / smoltcp 的 UDP socket），发送路径用模式匹配
+强制 `(SocketAddr::V4, TransportProtocol::Udp)`，端点是 TCP 或 IPv6 就直接返回
+`Error::UnsupportedEndpoint`；它的服务端还留着一条 warn，写明「TCP+UDP 多端点订阅者尚未支持」。
+差别只在拒绝发生的层次：上游在发送层挡下，本库在解析层就把非 0x11 的 endpoint option 过滤掉。
+所以只有 UDP 不是本项目单独偷的懒，是这条实现血统一致的范围取舍。
+
 仍然需要 TCP 的场景是真实存在的：单条消息超过 TP 重组容量、对端只提供 reliable 端点、跨公网传输、
 需要面向连接的背压。这类场景建议直接用 vsomeip，或在调用方侧另建通道，本库不打算覆盖。
 
