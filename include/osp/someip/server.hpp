@@ -349,12 +349,9 @@ class Server final {
     }
     const bool was_active = slot->active;
     sd::OptionView option;
-    const bool has_option = sd_header.OptionAt(entry.IndexFirstOptionsRun(), option);
+    const bool has_udp = sd_header.UdpEndpointOption(entry, option);
     slot->service = service;
-    slot->endpoint = (has_option && option.IsKnown() &&
-                      sd::OptionType::kIpV4Endpoint == option.Type())
-                         ? Ipv4Endpoint{option.AddressV4(), option.Port()}
-                         : source;
+    slot->endpoint = has_udp ? Ipv4Endpoint{option.AddressV4(), option.Port()} : source;
     slot->expires_ms = now_ms + (entry.Ttl() * 1000U);
     slot->active = true;
     if (!was_active) {
@@ -488,8 +485,7 @@ class Server final {
                                       const sd::SdHeaderView& sd_header,
                                       const Ipv4Endpoint& source) noexcept {
     sd::OptionView option;
-    const bool found = sd_header.OptionAt(entry.IndexFirstOptionsRun(), option);
-    if (found && option.IsKnown() && sd::OptionType::kIpV4Endpoint == option.Type()) {
+    if (sd_header.UdpEndpointOption(entry, option)) {
       return Ipv4Endpoint{option.AddressV4(), option.Port()};
     }
     return source;

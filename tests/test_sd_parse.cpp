@@ -9,6 +9,7 @@
 #include "osp/someip/sd/option_view.hpp"
 #include "osp/someip/sd_codec.hpp"
 
+#include <array>
 #include <cstdint>
 #include <cstring>
 
@@ -24,10 +25,16 @@ using osp::someip::SubscribeAckRequest;
 using osp::someip::SubscribeEventGroupRequest;
 using osp::someip::sd::Entry;
 using osp::someip::sd::EntryView;
+using osp::someip::sd::Flags;
+using osp::someip::sd::Header;
+using osp::someip::sd::Options;
+using osp::someip::sd::OptionsCount;
 using osp::someip::sd::OptionType;
 using osp::someip::sd::OptionView;
 using osp::someip::sd::RebootFlag;
+using osp::someip::sd::SdHeaderView;
 using osp::someip::sd::SdSessionCounter;
+using osp::someip::sd::ServiceEntry;
 using osp::someip::sd::TransportProtocol;
 
 namespace {
@@ -41,6 +48,19 @@ void RequireSameBytes(const T& value, osp::span<const std::uint8_t> expected) {
   REQUIRE(written.has_value());
   REQUIRE(expected.size() == written.value());
   REQUIRE(0 == std::memcmp(buf, expected.data(), expected.size()));
+}
+
+/// @brief Encode one offer entry over @p options and parse the payload back.
+SdHeaderView ParseOfferWith(std::uint8_t* out, const ServiceEntry& fields,
+                            osp::span<const Options> options, EntryView& entry) {
+  const Entry entries[1] = {Entry::Offer(fields)};
+  const Header header(Flags::NewSd(RebootFlag::kContinuous), osp::make_span(entries), options);
+  const auto written = header.EncodeTo(osp::make_span(out, 64U));
+  REQUIRE(written.has_value());
+  auto parsed = SdHeaderView::Parse(osp::make_span(out, written.value()));
+  REQUIRE(parsed.has_value());
+  REQUIRE(parsed.value().NextEntry(entry));
+  return parsed.value();
 }
 
 }  // namespace
@@ -100,6 +120,34 @@ TEST_CASE("sd parse - offer datagram round trips through the views", "[sd][parse
   const auto owned_option = parsed_option.value().view.ToOptions();
   REQUIRE(owned_option.has_value());
   RequireSameBytes(owned_option.value(), osp::make_span(datagram + kSdOffset + 28U, 12U));
+}
+
+TEST_CASE("sd parse - endpoint options are filtered by transport protocol", "[sd][parse]") {
+  const std::array<std::uint8_t, 4U> tcp_ip{192U, 0U, 2U, 1U};
+  const std::array<std::uint8_t, 4U> udp_ip{192U, 0U, 2U, 9U};
+  const Options tcp = Options::IpV4Endpoint(tcp_ip, TransportProtocol::kTcp, 30501U);
+  const Options udp = Options::IpV4Endpoint(udp_ip, TransportProtocol::kUdp, 30502U);
+  std::uint8_t payload[64] = {};
+  EntryView entry;
+  OptionView option;
+
+  // A TCP-only offer has no usable destination for a UDP-only stack.
+  const Options tcp_only[1] = {tcp};
+  const ServiceEntry single{OptionsCount(1U, 0U), 0x1234U, 0x0001U, 0x01U, 3U, 0U};
+  SdHeaderView tcp_header = ParseOfferWith(payload, single, osp::make_span(tcp_only), entry);
+  REQUIRE_FALSE(tcp_header.UdpEndpointOption(entry, option));
+
+  // TCP in the first run, UDP in the second: the second run is scanned too.
+  const Options mixed[2] = {tcp, udp};
+  ServiceEntry two_runs = single;
+  two_runs.options_count = OptionsCount(1U, 1U);
+  two_runs.index_first_options_run = 0U;
+  two_runs.index_second_options_run = 1U;
+  SdHeaderView mixed_header = ParseOfferWith(payload, two_runs, osp::make_span(mixed), entry);
+  REQUIRE(mixed_header.UdpEndpointOption(entry, option));
+  REQUIRE(TransportProtocol::kUdp == option.Protocol());
+  REQUIRE(udp_ip == option.AddressV4());
+  REQUIRE(30502U == option.Port());
 }
 
 TEST_CASE("sd parse - subscribe and ack shapes", "[sd][parse]") {

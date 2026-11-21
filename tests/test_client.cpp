@@ -27,9 +27,14 @@ using osp::someip::OpaquePayload;
 using osp::someip::ReturnCode;
 using osp::someip::ServiceInstance;
 using osp::someip::SubscribeAckRequest;
+using osp::someip::sd::Entry;
+using osp::someip::sd::Options;
+using osp::someip::sd::OptionsCount;
 using osp::someip::sd::RebootFlag;
 using osp::someip::sd::SdSession;
 using osp::someip::sd::SdSessionCounter;
+using osp::someip::sd::ServiceEntry;
+using osp::someip::sd::TransportProtocol;
 
 namespace {
 
@@ -136,6 +141,22 @@ std::uint32_t BuildOfferWithSession(std::uint8_t* out, std::uint32_t ttl,
   return built.has_value() ? built.value() : 0U;
 }
 
+/// @brief Offer datagram for service 0x1234/0x0001 over caller-supplied options.
+std::uint32_t BuildOfferWithOptions(std::uint8_t* out,
+                                    osp::span<const Options> options) noexcept {
+  ServiceEntry fields;
+  fields.options_count = OptionsCount(static_cast<std::uint8_t>(options.size()), 0U);
+  fields.service_id = 0x1234U;
+  fields.instance_id = 0x0001U;
+  fields.major_version = 1U;
+  fields.ttl = 30U;
+  const Entry entries[1] = {Entry::Offer(fields)};
+  const auto built = osp::someip::detail::WriteDatagram(osp::make_span(out, 128U),
+                                                        osp::make_span(entries), options,
+                                                        Session(3U));
+  return built.has_value() ? built.value() : 0U;
+}
+
 SdSession SessionWith(std::uint16_t id, RebootFlag reboot) noexcept {
   auto counter = SdSessionCounter::Resume(static_cast<std::uint16_t>(id - 1U), reboot);
   return counter.Next();
@@ -189,6 +210,46 @@ TEST_CASE("client - offers populate and stop-offers clear the cache", "[client]"
   REQUIRE(0U == client.ServiceCount());
   REQUIRE(nullptr == client.FindCached(service));
   REQUIRE(1U == handler.gone);
+}
+
+TEST_CASE("client - a TCP-only offer is not used as a destination", "[client][sd]") {
+  Sink sink;
+  Handler handler;
+  Client<Sink, Handler, 4U, 2U> client(sink, handler, {{127U, 0U, 0U, 1U}, 30510U});
+  const ServiceInstance service = ServiceInstance::New(0x1234U, 0x0001U, 1U);
+  const Ipv4Endpoint source{{127U, 0U, 0U, 2U}, 30490U};
+  const Options options[1] = {
+      Options::IpV4Endpoint({192U, 0U, 2U, 1U}, TransportProtocol::kTcp, 30501U)};
+
+  std::uint8_t offer[128] = {};
+  const std::uint32_t size = BuildOfferWithOptions(offer, osp::make_span(options));
+  REQUIRE(0U != size);
+  client.HandleDatagram(osp::make_span(offer, size), source, 0U);
+
+  const auto* cached = client.FindCached(service);
+  REQUIRE(nullptr != cached);
+  REQUIRE(source == cached->endpoint);  // the SD source, never the peer's TCP port
+}
+
+TEST_CASE("client - a UDP endpoint wins over a preceding TCP endpoint", "[client][sd]") {
+  Sink sink;
+  Handler handler;
+  Client<Sink, Handler, 4U, 2U> client(sink, handler, {{127U, 0U, 0U, 1U}, 30510U});
+  const ServiceInstance service = ServiceInstance::New(0x1234U, 0x0001U, 1U);
+  const Ipv4Endpoint source{{127U, 0U, 0U, 2U}, 30490U};
+  const Options options[2] = {
+      Options::IpV4Endpoint({192U, 0U, 2U, 1U}, TransportProtocol::kTcp, 30501U),
+      Options::IpV4Endpoint({192U, 0U, 2U, 9U}, TransportProtocol::kUdp, 30502U)};
+
+  std::uint8_t offer[128] = {};
+  const std::uint32_t size = BuildOfferWithOptions(offer, osp::make_span(options));
+  REQUIRE(0U != size);
+  client.HandleDatagram(osp::make_span(offer, size), source, 0U);
+
+  const auto* cached = client.FindCached(service);
+  REQUIRE(nullptr != cached);
+  const Ipv4Endpoint udp{{192U, 0U, 2U, 9U}, 30502U};
+  REQUIRE(udp == cached->endpoint);
 }
 
 TEST_CASE("client - request response matching and timeout", "[client]") {

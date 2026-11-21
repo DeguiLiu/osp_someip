@@ -234,7 +234,37 @@ class SdHeaderView final {
     return false;
   }
 
+  /**
+   * @brief First UDP IPv4 endpoint option among the entry's option runs.
+   *
+   * This stack only sends and receives over UDP, so an endpoint option that
+   * advertises TCP must never be used as a destination: a SOME/IP datagram
+   * written to a peer's TCP port is undeliverable and could reach an
+   * unrelated listener. Returns false when the entry references no usable
+   * UDP endpoint, letting the caller fall back to the SD source address.
+   */
+  bool UdpEndpointOption(const EntryView& entry, OptionView& out) const noexcept {
+    const OptionsCount count = entry.Count();
+    const std::uint32_t first = count.First();
+    const std::uint32_t total = first + count.Second();
+    for (std::uint32_t i = 0U; i < total; ++i) {
+      const std::uint32_t index =
+          (i < first) ? static_cast<std::uint32_t>(entry.IndexFirstOptionsRun()) + i
+                      : static_cast<std::uint32_t>(entry.IndexSecondOptionsRun()) + (i - first);
+      if (IsUdpEndpointAt(index, out)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
  private:
+  bool IsUdpEndpointAt(std::uint32_t index, OptionView& out) const noexcept {
+    return OptionAt(index, out) && out.IsKnown() &&
+           OptionType::kIpV4Endpoint == out.Type() &&
+           TransportProtocol::kUdp == out.Protocol();
+  }
+
   Error ValidateOptions() noexcept {
     Error err = Error::None();
     osp::span<const std::uint8_t> rest = options_bytes_;

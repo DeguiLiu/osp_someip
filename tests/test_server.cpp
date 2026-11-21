@@ -35,9 +35,13 @@ using osp::someip::ServiceInstance;
 using osp::someip::SubscribeEventGroupRequest;
 using osp::someip::sd::Entry;
 using osp::someip::sd::EntryView;
+using osp::someip::sd::EventGroupEntry;
+using osp::someip::sd::Options;
+using osp::someip::sd::OptionsCount;
 using osp::someip::sd::RebootFlag;
 using osp::someip::sd::SdSession;
 using osp::someip::sd::SdSessionCounter;
+using osp::someip::sd::TransportProtocol;
 
 namespace {
 
@@ -87,6 +91,23 @@ std::uint32_t BuildSubscribe(std::uint8_t* out, std::uint16_t service_id,
   request.local_rx_port = port;
   const auto built =
       BuildSubscribeEventGroupDatagram(osp::make_span(out, 128U), request, Session(9U));
+  return built.has_value() ? built.value() : 0U;
+}
+
+/// @brief Subscribe datagram for 0x1234/0x0001, group 0x0001, over @p options.
+std::uint32_t BuildSubscribeWithOptions(std::uint8_t* out, std::uint32_t ttl,
+                                        osp::span<const Options> options) noexcept {
+  EventGroupEntry payload;
+  payload.options_count = OptionsCount(static_cast<std::uint8_t>(options.size()), 0U);
+  payload.service_id = 0x1234U;
+  payload.instance_id = 0x0001U;
+  payload.major_version = 1U;
+  payload.ttl = ttl;
+  payload.event_group_id = 0x0001U;
+  const Entry entries[1] = {Entry::Subscribe(payload)};
+  const auto built = osp::someip::detail::WriteDatagram(osp::make_span(out, 128U),
+                                                        osp::make_span(entries), options,
+                                                        Session(9U));
   return built.has_value() ? built.value() : 0U;
 }
 
@@ -164,6 +185,29 @@ TEST_CASE("server - subscribe is acknowledged and publish reaches the subscriber
   REQUIRE(3U == notification.value().Body().size());
   REQUIRE(0xAAU == notification.value().Body()[0]);
   REQUIRE(0xCCU == notification.value().Body()[2]);
+}
+
+TEST_CASE("server - a TCP-only subscriber endpoint falls back to the SD source", "[server][sd]") {
+  Capture capture;
+  Server<Capture, 4U, 4U> server(capture);
+  const ServiceInstance service = ServiceInstance::New(0x1234U, 0x0001U, 1U);
+  REQUIRE(server.Offer(service, {{127U, 0U, 0U, 1U}, 30509U}, 30U, 0U));
+  const Ipv4Endpoint client{{127U, 0U, 0U, 2U}, 30490U};
+  const Options options[1] = {
+      Options::IpV4Endpoint({127U, 0U, 0U, 2U}, TransportProtocol::kTcp, 30510U)};
+
+  std::uint8_t subscribe[128] = {};
+  const std::uint32_t size = BuildSubscribeWithOptions(subscribe, 10U, osp::make_span(options));
+  REQUIRE(0U != size);
+  server.HandleDatagram(osp::make_span(subscribe, size), client, 100U);
+
+  REQUIRE(1U == server.SubscriberCount());
+  REQUIRE(server.IsSubscribed(service, 0x0001U, client));
+  REQUIRE_FALSE(server.IsSubscribed(service, 0x0001U, {{127U, 0U, 0U, 2U}, 30510U}));
+
+  const std::uint8_t payload[1] = {0xAAU};
+  server.Publish(service, 0x0001U, 0x8001U, osp::make_span(payload), 200U);
+  REQUIRE(client == capture.Last().to);  // events never go to the advertised TCP port
 }
 
 TEST_CASE("server - subscriptions expire and stop-subscribe removes them", "[server]") {
