@@ -7,10 +7,6 @@ A SOME/IP stack for embedded Linux and RT-Thread, written as a C++17 header-only
 server side and the client side. Sockets and threads are not part of the library: the caller
 supplies send, receive and time, so the core runs inside an existing event loop or RTOS task.
 
-Scope today is M0-M3 plus SOME/IP-TP reassembly and E2E Profiles 1, 2, 4, 5 and 7. Transport is
-UDP only and endpoints are IPv4 only. Board-level numbers and third-party interop are covered in
-"Status and limits".
-
 ## Features
 
 - Wire format: 16-byte SOMF header, message encode/decode, datagram walker.

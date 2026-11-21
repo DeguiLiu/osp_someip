@@ -6,9 +6,6 @@ SOME/IP 协议栈，C++17 头文件库，面向嵌入式 Linux 与 RT-Thread，�
 [newosp](https://github.com/DeguiLiu/newosp)。包含线格式、Service Discovery、服务端和客户端，
 不包含 socket 与线程：收发和时钟由调用方注入，可以接进已有的事件循环或 RTOS 任务。
 
-目前完成 M0–M3，并补上 SOME/IP-TP 重组与 E2E Profile 1/2/4/5/7；传输只有 UDP，端点只有
-IPv4。真机与第三方互操作的情况见“状态与限制”。
-
 ## 能力
 
 - 线格式：16 字节 SOMF 头、消息编解码、数据报遍历。
