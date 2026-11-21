@@ -21,16 +21,17 @@ setarch $(uname -m) -R env ASAN_OPTIONS=detect_leaks=1 ./build-asan/tests/someip
 ./build/tests/someip_no_alloc          # exit 0 表示零分配
 ```
 
-验收：154 个用例 / 53032 条断言全过；sanitizer 无报告；零分配进程返回 0；
+验收：158 个用例 / 53055 条断言全过；sanitizer 无报告；零分配进程返回 0；
 `someip_headers_self_contained` 把 30 个公开头文件逐个单独编译，全部通过。
+`ctest` 默认 161 项；本机另外给了 `-DSOMEIP_LWIP_DIR`，因此是 162 项。
 
 三点复现注意（2026-11-21 复核）：
 
-- 53032 含组播用例的 24 条断言，要让 `ctest` 跑到它必须传
-  `-DSOMEIP_TEST_MCAST_IFACE=<本机 IPv4>`；不传则该用例跳过，断言数是 53008。
+- 53055 含组播用例的 24 条断言，要让 `ctest` 跑到它必须传
+  `-DSOMEIP_TEST_MCAST_IFACE=<本机 IPv4>`；不传则该用例跳过，断言数是 53031。
 - sanitizer 那行的 `setarch $(uname -m) -R` 不是可选装饰：gcc 11 的 libasan 6 与 kernel 6.5
   的高熵 ASLR 冲突，不关随机化时大约每 20 次启动崩 1 次，现象是没有报告的
-  `AddressSanitizer:DEADLYSIGNAL`，整轮 `ctest` 会随机挂掉几十项；关掉后 157 项全过、零报告。
+  `AddressSanitizer:DEADLYSIGNAL`，整轮 `ctest` 会随机挂掉几十项；关掉后 161 项全过、零报告。
   这是工具链与内核的组合问题，不是本仓库的内存缺陷。
 - aarch64 通道要先 `export LD_LIBRARY_PATH=$AARCH64_TOOLCHAIN_ROOT/usr/lib/x86_64-linux-gnu`，
   否则交叉 binutils 的 `as` 找不到 `libopcodes-2.38-arm64.so`。工具链文件里那句
@@ -58,7 +59,7 @@ cmake --build build/coverage -j8 && ctest --test-dir build/coverage
 gcovr -r . --filter 'include/osp/someip/' --txt-summary build/coverage
 ```
 
-当前结果（2026-11-21 复测，含组播用例）：行 57.6%、函数 69.7%、分支 35.5%。
+当前结果（2026-11-21 复测，含组播用例）：行 58.0%、函数 69.8%、分支 36.7%。
 `server.hpp` / `client.hpp` 是模板，每个 TU 各实例化一次、gcov 按实例计数，所以这两项偏低
 （分别 39% 与 64%）；单个头文件里 `header.hpp`、`udp_link.hpp` 为 100%，
 `sd/option_view.hpp` 为 97%。跑覆盖率时同样要给 `SOMEIP_TEST_MCAST_IFACE`，否则组播用例跳过，
@@ -73,10 +74,10 @@ OSP_GITHUB_MIRROR=https://ghfast.top/ cmake -S . -B /tmp/fetch-check \
 cmake --build /tmp/fetch-check -j8 && ctest --test-dir /tmp/fetch-check
 ```
 
-结果 158 项全过。这条路径验证的是 `FetchContent` 拉下来的 newosp main 与本地同级目录等价。
+结果 161 项全过。这条路径验证的是 `FetchContent` 拉下来的 newosp（钉 v0.9.6）与本地同级目录等价。
 
 发布状态复核：从 Gitee 重新 `git clone --depth 1` 到空目录，`cmake --preset host-debug
--DSOMEIP_FETCH_NEWOSP=ON` 后构建，158 项全过（154 个用例、53032 条断言）。仓库自包含，不依赖任何未提交文件。
+-DSOMEIP_FETCH_NEWOSP=ON` 后构建，161 项全过（158 个用例、53055 条断言）。仓库自包含，不依赖任何未提交文件。
 
 跨实现互通（已验证，双向）：
 
@@ -187,7 +188,7 @@ tools/vsomeip_interop.sh server 12   # 本仓库服务端 ← vsomeip 客户端
 tools/vsomeip_interop.sh client 10   # 本仓库客户端 → vsomeip 服务端
 ```
 
-实测结果（2026-11-20，vsomeip 3.4.10）：
+实测结果（2026-11-20 首次跑通，2026-11-21 在端点过滤修复后复跑，vsomeip 3.4.10）：
 
 | 方向 | 观察到的消息 |
 |---|---|
@@ -200,8 +201,13 @@ tools/vsomeip_interop.sh client 10   # 本仓库客户端 → vsomeip 服务端
    套接字，`client_demo --multicast` 才会入组。服务端同理需要 `IP_MULTICAST_IF` 指定出口。
 2. 同一来源的会话号会回退：vsomeip 对 FindService 的应答重新从 1 编号，与周期 Offer 的计数交错。
    重启判定因此改为“会话号回到 1 且距上一条报文至少 2 s”，避免把普通应答当成对端重启。
+3. 端点选项只看类型、不看 L4 协议字节（2026-11-21 修）：对端若把 TCP endpoint option 放在第一个，
+   本库会把 UDP 数据报发往对端的 TCP 端口。现在客户端发现缓存、服务端远端 offer 观察者与订阅目标
+   解析统一走 `SdHeaderView::UdpEndpointOption`，只接受 protocol=0x11 的 IPv4 endpoint，
+   找不到时回退 SD 源地址。对照分析见 `docs/comparison_with_vsomeip_zh.md` 5.4。
 
-仍未覆盖：Docker 镜像方式、带 TLS 的 vsomeip、以及跨真实交换机的组播。
+仍未覆盖：Docker 镜像方式、E2E 与 TP 过线对 vsomeip、多实例与多事件组、长跑稳定性，
+以及跨真实交换机的组播。
 
 ## 4. ARM 目标通道（已执行，qemu）
 
@@ -240,7 +246,7 @@ cmake -S . -B build/aarch64 \
 cmake --build build/aarch64 -j8 && ctest --test-dir build/aarch64
 ```
 
-两条路径都在本机各跑过一遍：133 项，1 项跳过（组播），其余全过。
+两条路径都在本机各跑过一遍：159 项，1 项跳过（组播），其余全过。
 
 ### 4.1 完整内核（qemu-system）
 
@@ -276,10 +282,10 @@ tools/arm_vm.sh Image busybox.static \
 
 ```
 KERNEL: Linux 6.6.134-0-virt aarch64
-test cases: 154 | 153 passed | 1 skipped        (组播用例需要真机网卡)
-assertions: 53008 | 53008 passed
+test cases: 158 | 157 passed | 1 skipped        (组播用例需要真机网卡)
+assertions: 53031 | 53031 passed
 TESTS_RC=0
-round_trips=3000 avg=112.4us p50=92us p99=349us rate=8558 req/s
+round_trips=3000 avg=106.2us p50=102us p99=214us max=649us rate=8948 req/s
 BENCH_RC=0
 ```
 
@@ -296,8 +302,8 @@ BENCH_RC=0
 DEMO_RC=0
 ```
 
-结果：153 个用例通过，1 个跳过（组播），`someip_loopback_bench` 为
-p50 11 µs、p99 24 µs、约 6.6 万次请求/秒。这是 qemu 用户态模拟，不是板上数据。
+结果：157 个用例通过，1 个跳过（组播），`someip_loopback_bench` 为
+p50 14 µs、p99 43 µs、约 5.8 万次请求/秒。这是 qemu 用户态模拟，不是板上数据。
 
 两个示例程序也在 qemu 下跑通了完整链路（等同板上冒烟的命令）：
 
@@ -312,7 +318,7 @@ qemu-aarch64 -L "$AARCH64_TOOLCHAIN_ROOT/usr/aarch64-linux-gnu" \
 观察结果：客户端 `available` → `subscribe ack ttl=10` → `response 0x00010001` → 每秒一条
 `event 0x8001`；服务端 `1 subscriber(s)`。
 
-同一工具链再加 `-DSOMEIP_NO_EXCEPTIONS=ON` 再跑一遍：119 项全过，组播 1 项跳过，
+同一工具链再加 `-DSOMEIP_NO_EXCEPTIONS=ON` 再跑一遍：159 项里 158 过，组播 1 项跳过，
 说明无异常、无 RTTI 的目标配置在 aarch64 上同样成立。
 
 真实板卡仍未验证：需要一块 aarch64 板子，把上面的命令换成板卡 IP 与 `tools/sd_probe.py`。
@@ -398,7 +404,7 @@ tools/rtthread_qemu.sh "$PWD/rt-thread"
 | 双进程 C++ demo | 完成 | — |
 | Python 探针双向互通 | 完成 | — |
 | 组播（真实网卡） | 完成 | `ens192`，24 条断言 |
-| aarch64 交叉构建 + qemu | 完成 | 155 过 / 1 跳过（组播），基准见 `benchmark_report_zh.md` |
+| aarch64 交叉构建 + qemu | 完成 | 159 项里 158 过 / 1 跳过（组播），基准见 `benchmark_report_zh.md` |
 | vsomeip 互操作（netns + veth） | 完成 | 双向通过，见第 3 节 |
 | vsomeip 容器方式 | 未执行 | 用户不在 docker 组，已被 netns 方式替代 |
 | ARM 板卡冒烟 | 待执行 | 没有目标板 |

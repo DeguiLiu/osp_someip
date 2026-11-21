@@ -24,8 +24,8 @@ supplies send, receive and time, so the core runs inside an existing event loop 
   AUTOSAR C reference.
 
 Not a fit when you need payload type serialization (this library moves bytes, the caller owns type
-codecs), TCP or IPv6, or a ready-made daemon with a configuration system, which is what vsomeip is
-for.
+codecs), TCP or IPv6 (see `docs/comparison_with_vsomeip_zh.md` for why UDP only), or a ready-made
+daemon with a configuration system, which is what vsomeip is for.
 
 ## Features
 
@@ -170,7 +170,8 @@ docs/                design, API, validation, benchmark and static-analysis note
   unverified, and lwIP traffic does not run yet: RT-Thread 5.4 `netdev.h` writes `#if NETDEV_IPV6`
   while Kconfig emits an empty macro. The full record is in `docs/validation_lanes_zh.md` 5.2.
 - Transport is UDP only and the endpoint type is IPv4 only: the SD IPv6 endpoint and IPv6 multicast
-  options encode and parse, but there is no IPv6 send or receive path. TCP is not implemented.
+  options encode and parse, but there is no IPv6 send or receive path. TCP is not implemented, and
+  SD endpoint options that advertise TCP are filtered out instead of being used as a destination.
 - SOME/IP-TP tracks 16-byte units, so segments may arrive in any order; overlapping segments are
   dropped. E2E Profiles 3, 6, 11, 22 and 44 are not implemented; the cyclic use of Profile 2 is
   described in `docs/api_zh.md`.
@@ -187,6 +188,7 @@ The design notes are written in Chinese.
 | [docs/benchmark_report_zh.md](docs/benchmark_report_zh.md) | Loopback latency baseline |
 | [docs/static_analysis_zh.md](docs/static_analysis_zh.md) | cpplint / clang-tidy results and deviations |
 | [docs/comparison_with_rust_zh.md](docs/comparison_with_rust_zh.md) | Comparison with the Rust prototype simple_someip |
+| [docs/comparison_with_vsomeip_zh.md](docs/comparison_with_vsomeip_zh.md) | Comparison with vsomeip, why UDP only, interop boundary |
 | [docs/reference_projects_zh.md](docs/reference_projects_zh.md) | Reference implementations and interop peers |
 
 Environment check: `./tools/verify_env.sh`.

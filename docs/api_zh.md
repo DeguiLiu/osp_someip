@@ -62,6 +62,7 @@
 | `sd::Options::IpV4Endpoint/Configuration/LoadBalancing(...)` | 构造 option |
 | `sd::Header(flags, entries, options)` | 编码完整 SD 载荷 |
 | `sd::SdHeaderView::Parse(payload)` | 一次性校验两个分区；`NextEntry()` / `NextOption()` / `OptionAt()` 遍历 |
+| `sd::SdHeaderView::UdpEndpointOption(entry, out)` | 在 entry 两个 option run 里取第一个 protocol=0x11 的 IPv4 endpoint；只有 TCP 端点时返回 false |
 | `sd::EntryView` / `sd::OptionView` | 零拷贝视图，`ToEntry()` / `ToOptions()` 还原值类型 |
 | `sd::SdSessionCounter` | `New()`、`Resume(last, reboot)`、`Next()`；计数 1..0xFFFF，首次回绕后 reboot 标志变成 Continuous |
 

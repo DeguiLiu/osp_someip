@@ -19,6 +19,7 @@ SOME/IP 协议栈，C++17 头文件库，面向嵌入式 Linux 与 RT-Thread，�
 
 不适合：需要 payload 类型序列化（本库只搬字节，类型编解码归调用方）、需要 TCP 或 IPv6、
 需要开箱即用的守护进程与配置体系（那是 vsomeip 的位置）。
+为什么只有 UDP、与 vsomeip 的取舍差异见 `docs/comparison_with_vsomeip_zh.md`。
 
 ## 能力
 
@@ -154,7 +155,8 @@ docs/                设计、接口、验证、基准、静态分析
   lwIP 后端对 lwIP 2.2.0 头文件零告警通过类型检查，qemu-vexpress-a9 上 15 项运行时自检全过。
   真实板卡未验证；lwIP 运行时收发未打通，卡点与结论见 `docs/validation_lanes_zh.md` 5.2。
 - 传输只有 UDP，端点类型只有 IPv4：SD 的 IPv6 endpoint 与 IPv6 multicast option 能编解码，
-  但没有 IPv6 收发路径；TCP 未实现。
+  但没有 IPv6 收发路径；TCP 未实现，SD 里声明 TCP 的 endpoint option 会被过滤掉，
+  不会被当成发送目标。
 - SOME/IP-TP 按 16 字节单元记录到达情况，乱序可重组，重叠分段丢弃；E2E 未实现 Profile
   3/6/11/22/44，Profile 2 的周期用法见 `docs/api_zh.md`。
 - 参考实现只用于核对行为，不复制其代码。
@@ -169,6 +171,7 @@ docs/                设计、接口、验证、基准、静态分析
 | [docs/benchmark_report_zh.md](docs/benchmark_report_zh.md) | 回环性能基线 |
 | [docs/static_analysis_zh.md](docs/static_analysis_zh.md) | cpplint / clang-tidy 结论与偏差 |
 | [docs/comparison_with_rust_zh.md](docs/comparison_with_rust_zh.md) | 与 Rust 原型 simple_someip 的对照 |
+| [docs/comparison_with_vsomeip_zh.md](docs/comparison_with_vsomeip_zh.md) | 与 vsomeip 的对照、为什么不需要 TCP、互通边界 |
 | [docs/reference_projects_zh.md](docs/reference_projects_zh.md) | 参考实现与互操作对端清单 |
 
 环境自检：`./tools/verify_env.sh`。

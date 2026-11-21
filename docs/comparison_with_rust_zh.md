@@ -8,7 +8,7 @@ SOME/IP-TP 重组、E2E Profile 1/2/4/5/7、真实网卡组播与 vsomeip 双向
 
 | 项 | Rust 原型 | 本项目 |
 |---|---|---|
-| 版本 | simple-someip 0.15（`src/` 39,035 行） | M0–M3 核心（`include/` 30 个头文件、5,388 行） |
+| 版本 | simple-someip 0.15（`src/` 39,035 行） | 协议核心（`include/` 30 个头文件、5,411 行） |
 | 语言 | Rust 2024，`no_std` + 可选 `alloc` | C++17，header-only |
 | 运行时 | tokio（std）或 embassy（bare-metal） | 调用方事件循环 + `Tick(now_ms)` |
 | 分配 | `heapless` 用于 SD；`std` 特性下 `Vec`/`Arc` | 全链路无堆（见证进程守护） |
@@ -49,7 +49,7 @@ SOME/IP-TP 重组、E2E Profile 1/2/4/5/7、真实网卡组播与 vsomeip 双向
 
 | 项 | Rust | 本项目 |
 |---|---|---|
-| 单元/集成测试 | 540 个 `#[test]` + 285 个 `#[tokio::test]` | 154 个用例、53032 条断言（含 SD 变异、TP 分段与五套 E2E 随机扫描） |
+| 单元/集成测试 | 540 个 `#[test]` + 285 个 `#[tokio::test]` | 158 个用例、53055 条断言（含 SD 变异、TP 分段与五套 E2E 随机扫描） |
 | 线格式 golden | 19 条手写字面量 | 19 条同源字面量（逐字节移植） |
 | 无分配 | `no_alloc_witness` 测试 | `someip_no_alloc` 进程，覆盖 server + client |
 | 真实网络 | tokio + vsomeip 容器互操作 | 真实 UDP 用例 + 双进程 demo + Python 探针 + vsomeip 双向互操作 |

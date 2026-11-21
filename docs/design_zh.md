@@ -84,6 +84,10 @@ SD 解析沿用同一模式：`EntryView` 固定 16 字节、`OptionView` 按长
 被跳过，未知 option 类型保留原位，保证后续 entry 的选项索引不漂移。视图可随时用
 `ToEntry()` / `ToOptions()` 还原成值类型。
 
+端点解析统一走 `UdpEndpointOption(entry, out)`：只接受 protocol 字节为 0x11 的 IPv4 endpoint
+option，两个 option run 都会扫。本库只有 UDP 收发路径，把数据报发往对端声明的 TCP 端口既送不到、
+又可能打到无关监听者，因此 TCP 端点一律不作为目标；一个可用选项都没有时回退到 SD 报文的源地址。
+
 ### 3.3 错误模型
 
 `Error` 是值类型：`ErrorCode` 表示类别，`value` 表示违规值或所需字节数，`available` 表示实际可用字节数。
@@ -207,10 +211,10 @@ CRC-8/H2F 与 4 位计数器，CRC 覆盖计数器字节、载荷与按计数器
 | L2 互操作 | 与 vsomeip 容器对端做 RPC、通知、订阅 | 双向收发一致 |
 | L3 目标 | ARM Linux / RT-Thread 构建与静态内存报告 | 无堆、尺寸达标 |
 
-当前 L0/L1 结果：154 个用例、53032 条断言（含 SD 变异扫描、4000 轮 TP 分段扫描与五套 E2E 的 2000 轮随机扫描），外加零分配见证进程；
+当前 L0/L1 结果：158 个用例、53055 条断言（含 SD 变异扫描、4000 轮 TP 分段扫描与五套 E2E 的 2000 轮随机扫描），外加零分配见证进程；
 普通构建、`-fno-exceptions -fno-rtti` 构建、ASan+UBSan 构建与 aarch64 交叉构建四种构型全部通过，
 且都在 `-Wall -Wextra -Wpedantic -Wconversion -Wshadow` 下零告警。L2 的组播在真实网卡
-（`ens192`）上验证；L3 完成 aarch64 交叉构建与 qemu 运行，155 过、1 跳过。
+（`ens192`）上验证；L3 完成 aarch64 交叉构建与 qemu 运行，159 项里 158 过、1 跳过。
 
 ## 5. 里程碑与风险
 
