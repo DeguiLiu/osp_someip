@@ -3,11 +3,14 @@
  * @brief Runnable SD client: finds a service, subscribes, prints events.
  *
  * Usage:
- *   someip_client_demo --server 127.0.0.1 [--port 30510] [--service 1234]
- *                      [--seconds 10]
+ *   someip_client_demo --server 127.0.0.1 [--local 127.0.0.1] [--port 30510]
+ *                      [--service HEX] [--method HEX] [--seconds 10] [--multicast]
  *
  * The client sends FindService to <server>:30490, subscribes to event group
  * 0x0001 on the first offer, and prints every notification it receives.
+ * --local/--port select the source address of the client socket; --multicast
+ * opens a second socket joined to the SD group instead of sharing that socket
+ * with SD traffic, which is what a two-node setup across a switch needs.
  */
 
 #include "osp/log.hpp"
@@ -124,7 +127,7 @@ bool ParseOptions(int argc, char** argv, Options& options) noexcept {
     } else {
       std::printf(
           "usage: %s --server IP [--local IP] [--port N] [--service HEX] [--method HEX]"
-          " [--seconds N]\n",
+          " [--seconds N] [--multicast]\n",
           argv[0]);
       return false;
     }

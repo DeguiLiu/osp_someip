@@ -21,7 +21,9 @@ if(SOMEIP_FETCH_NEWOSP AND NOT EXISTS "${OSP_INCLUDE_DIR}")
     endif()
     FetchContent_Declare(
         newosp
-        URL ${OSP_GITHUB_MIRROR}https://github.com/DeguiLiu/newosp/archive/refs/heads/main.zip
+        # Pinned to a release tag so a build stays reproducible; bump to the newest
+        # newosp release when upgrading the dependency.
+        URL ${OSP_GITHUB_MIRROR}https://github.com/DeguiLiu/newosp/archive/refs/tags/v0.9.6.zip
         ${_someip_fetch_ts}
     )
     FetchContent_MakeAvailable(newosp)
