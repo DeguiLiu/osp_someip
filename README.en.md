@@ -190,6 +190,7 @@ The design notes are written in Chinese.
 | [docs/comparison_with_rust_zh.md](docs/comparison_with_rust_zh.md) | Comparison with the Rust prototype simple_someip |
 | [docs/comparison_with_vsomeip_zh.md](docs/comparison_with_vsomeip_zh.md) | Comparison with vsomeip, why UDP only, interop boundary |
 | [docs/reference_projects_zh.md](docs/reference_projects_zh.md) | Reference implementations and interop peers |
+| [docs/blog_osp_someip_zh.md](docs/blog_osp_someip_zh.md) | Technical blog: design trade-offs, why UDP only, interop boundary with vsomeip (Chinese) |
 
 Environment check: `./tools/verify_env.sh`.
 

@@ -173,6 +173,7 @@ docs/                设计、接口、验证、基准、静态分析
 | [docs/comparison_with_rust_zh.md](docs/comparison_with_rust_zh.md) | 与 Rust 原型 simple_someip 的对照 |
 | [docs/comparison_with_vsomeip_zh.md](docs/comparison_with_vsomeip_zh.md) | 与 vsomeip 的对照、为什么不需要 TCP、互通边界 |
 | [docs/reference_projects_zh.md](docs/reference_projects_zh.md) | 参考实现与互操作对端清单 |
+| [docs/blog_osp_someip_zh.md](docs/blog_osp_someip_zh.md) | 技术博客：设计取舍、为什么只有 UDP、与 vsomeip 的互通边界 |
 
 环境自检：`./tools/verify_env.sh`。
 
