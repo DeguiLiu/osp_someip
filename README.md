@@ -42,17 +42,6 @@ cmake --build --preset host-debug -j8
 ctest --preset host-debug
 ```
 
-主机上 154 个用例、53032 条断言通过（`ctest` 158 项）；`noexc` 与 ASan + UBSan 两组构建
-另行跑通，Debug、Release+noexc、ASan+UBSan、aarch64 四种构型编译零告警。
-aarch64 交叉构建后在 qemu 下 155 过、1 跳过（组播用例需要真机网卡）。
-x86 回环 3000 次 RPC 往返，p50 5–6 µs、p99 9–24 µs，约 12 万–16 万次请求/秒；
-aarch64（qemu）同一基准 p50 12–14 µs、p99 27–49 µs，约 5.4 万–6.6 万次请求/秒。
-吞吐随机器负载波动，数据与测量条件见 `docs/benchmark_report_zh.md`（最近复核 2026-11-21）。
-
-ASan 构型在 gcc 11 加 kernel 6.5 上要关掉地址随机化再跑，否则 libasan 会与高熵 ASLR 冲突、
-随机在启动阶段崩掉（`setarch $(uname -m) -R ctest --preset asan`），
-细节见 `docs/validation_lanes_zh.md`。
-
 ## 接入方式
 
 服务端把发送通道作为模板参数，请求处理函数在编译期绑定：

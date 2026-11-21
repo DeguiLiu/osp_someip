@@ -44,19 +44,6 @@ cmake --build --preset host-debug -j8
 ctest --preset host-debug
 ```
 
-On the host, 154 test cases with 53032 assertions pass (158 `ctest` entries); the `noexc` and
-ASan + UBSan builds pass separately, and all four configurations (Debug, Release with `noexc`,
-ASan + UBSan, aarch64) compile with zero warnings. An aarch64 cross build runs 155 cases under qemu
-with one skip, the multicast case that needs a real NIC. A 3000-round-trip RPC benchmark over
-loopback gives p50 5-6 us and p99 9-24 us, about 120k-160k requests per second on x86, and p50
-12-14 us with p99 27-49 us, about 54k-66k requests per second on aarch64 under qemu. Throughput
-tracks machine load; see `docs/benchmark_report_zh.md` for the data and the measurement conditions
-(last re-checked 2026-11-21).
-
-The ASan configuration needs address-space randomization disabled on gcc 11 with kernel 6.5,
-otherwise libasan conflicts with high-entropy ASLR and dies at startup at random:
-`setarch $(uname -m) -R ctest --preset asan`. See `docs/validation_lanes_zh.md`.
-
 ## Using the API
 
 The server takes its send path as a template argument, and the request handler is bound at compile
