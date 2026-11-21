@@ -28,8 +28,8 @@ clang-tidy tests/header_smoke.cpp -checks='-*,performance-*' \
 
 ## 3. 接受的偏差
 
-`bugprone-easily-swappable-parameters` 仍是唯一一类报告，当前 11 条（加入 TP 与 E2E Profile 1
-后没有新增检查类别）。例如：
+`bugprone-easily-swappable-parameters` 仍是唯一一类报告，当前 12 条（补齐 E2E Profile
+2/4/5/7 后没有新增检查类别）。例如：
 
 - `Header::New(message_id, request_id, protocol_version, interface_version, ...)`
 - `Client::Publish(service, event_group_id, event_id, payload, ...)`
@@ -41,6 +41,17 @@ clang-tidy tests/header_smoke.cpp -checks='-*,performance-*' \
 
 ## 4. 与编译告警的关系
 
-三种构型（普通、`-fno-exceptions -fno-rtti`、ASan+UBSan）均以
+四种构型（普通、`-fno-exceptions -fno-rtti`、ASan+UBSan、aarch64 交叉）均以
 `-Wall -Wextra -Wpedantic -Wconversion -Wshadow` 构建，当前零告警；
 Release 构建曾暴露 newosp `log.hpp` 的未使用参数，已在 newosp 侧修复（提交 `996e498`）。
+
+2026-11-21 复核修掉了测试侧残留的 2 处告警，都是补 E2E Profile 2/5 时带进来的：
+
+| 位置 | 告警 | 处理 |
+|---|---|---|
+| `tests/test_e2e_profile2.cpp` | 未使用变量 `size` | 删掉，该用例改用 `sizes[]` |
+| `tests/test_e2e_fuzz.cpp` | `std::size_t` 到 `std::uint32_t` 隐式窄化 | 缓冲区容量改用 `std::uint32_t` 常量 |
+
+窄化那条只在 `-O0`（Debug 与 ASan 构型）报，Release 下常量折叠后不报，所以之前漏了过去；
+库头一直是干净的，两处都在测试 TU 里。复核方式是四种构型各自全新构建后统计 `warning:` 行数，
+结果都是 0。

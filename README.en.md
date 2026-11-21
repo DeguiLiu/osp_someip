@@ -7,8 +7,9 @@ A SOME/IP stack for embedded Linux and RT-Thread, written as a C++17 header-only
 server side and the client side. Sockets and threads are not part of the library: the caller
 supplies send, receive and time, so the core runs inside an existing event loop or RTOS task.
 
-Scope today is M0-M3 plus SOME/IP-TP reassembly and E2E Profile 1. Board-level numbers and
-third-party interop are covered in "Status and limits".
+Scope today is M0-M3 plus SOME/IP-TP reassembly and E2E Profiles 1, 2, 4, 5 and 7. Transport is
+UDP only and endpoints are IPv4 only. Board-level numbers and third-party interop are covered in
+"Status and limits".
 
 ## Features
 
@@ -47,11 +48,18 @@ cmake --build --preset host-debug -j8
 ctest --preset host-debug
 ```
 
-On the host, 154 test cases with 53032 assertions pass; the `noexc` and ASan + UBSan builds pass
-separately. An aarch64 cross build runs 153 cases under qemu with one skip, the multicast case that
-needs a real NIC. A 3000-round-trip RPC benchmark over loopback gives p50 5 us and p99 9-12 us,
-about 160k requests per second on x86, and p50 11 us with p99 24 us, about 66k requests per second,
-on aarch64 under qemu. See `docs/benchmark_report_zh.md`.
+On the host, 154 test cases with 53032 assertions pass (158 `ctest` entries); the `noexc` and
+ASan + UBSan builds pass separately, and all four configurations (Debug, Release with `noexc`,
+ASan + UBSan, aarch64) compile with zero warnings. An aarch64 cross build runs 155 cases under qemu
+with one skip, the multicast case that needs a real NIC. A 3000-round-trip RPC benchmark over
+loopback gives p50 5-6 us and p99 9-24 us, about 120k-160k requests per second on x86, and p50
+12-14 us with p99 27-49 us, about 54k-66k requests per second on aarch64 under qemu. Throughput
+tracks machine load; see `docs/benchmark_report_zh.md` for the data and the measurement conditions
+(last re-checked 2026-11-21).
+
+The ASan configuration needs address-space randomization disabled on gcc 11 with kernel 6.5,
+otherwise libasan conflicts with high-entropy ASLR and dies at startup at random:
+`setarch $(uname -m) -R ctest --preset asan`. See `docs/validation_lanes_zh.md`.
 
 ## Using the API
 
@@ -151,22 +159,33 @@ set `OSP_INCLUDE_DIR` before `find_package`.
 
 ```text
 include/osp/someip/
-  header.hpp        SOMF header, value type and view
-  message.hpp       message codec and datagram walker
-  payload.hpp       payload skeleton, OpaquePayload
-  owned_payload.hpp fixed-capacity payload
-  wire.hpp          big-endian writer, encoder CRTP skeleton
-  sd/               SD types, entries, options, header, session counter
-  sd_codec.hpp      SD datagram builders
-  server.hpp        service provider
-  client.hpp        service consumer
-  udp_link.hpp      newosp UDP socket adapters
-  e2e.hpp           E2E policy hook
-  e2e_profile1.hpp  E2E Profile 1
-  tp.hpp            SOME/IP-TP segmentation and reassembly
-examples/           server, client, loopback benchmark
-tests/              Catch2 tests with hand-written wire goldens
-docs/               design, validation, benchmark and static-analysis notes
+  someip.hpp           umbrella include
+  header.hpp           SOMF header, value type and view
+  message.hpp          message codec and datagram walker
+  message_id.hpp       message ID: service [31:16], method [15:0]
+  message_type.hpp     message type field and the TP flag
+  return_code.hpp      return codes: named, generic and interface ranges
+  error.hpp            wire codec error codes, plain values
+  endpoint.hpp         IPv4 endpoint and SD multicast constants
+  service_instance.hpp service identity: service, instance, major
+  payload.hpp          payload skeleton, OpaquePayload
+  owned_payload.hpp    fixed-capacity payload
+  wire.hpp             big-endian writer, encoder CRTP skeleton
+  sd/                  SD types, entries, options, header, session counter, zero-copy views
+  sd_codec.hpp         SD datagram builders
+  server.hpp           service provider
+  client.hpp           service consumer
+  udp_link.hpp         newosp UDP socket adapters
+  e2e.hpp              E2E policy hook
+  e2e_profile1.hpp     Profile 1: CRC-8 SAE J1850
+  e2e_profile2.hpp     Profile 2: CRC-8/H2F plus a counter state machine
+  e2e_profile4.hpp     Profile 4: CRC-32/AUTOSAR
+  e2e_profile5.hpp     Profile 5: CRC-16/CCITT-FALSE
+  e2e_profile7.hpp     Profile 7: CRC-64/XZ
+  tp.hpp               SOME/IP-TP segmentation and reassembly
+examples/              server, client, loopback benchmark
+tests/                 Catch2 tests with hand-written wire goldens
+docs/                  design, validation, benchmark and static-analysis notes
 ```
 
 ## Status and limits
@@ -178,13 +197,18 @@ docs/               design, validation, benchmark and static-analysis notes
 - vsomeip 3.4.10 interop passes in both directions. The two stacks run in separate network
   namespaces joined by a veth pair, so Docker is not needed; see `tools/vsomeip_interop.sh` and
   `docs/validation_lanes_zh.md`.
-- RT-Thread: the 24 core headers compile against a stub `rtthread.h`, the lwIP backend
-  type-checks against lwIP 2.2.0 headers, and 15 runtime self-checks pass on qemu-vexpress-a9
-  (`tools/rtthread_qemu.sh`). Real boards and lwIP traffic are still unverified.
+- RT-Thread: compile-time portability plus a qemu self-check, nothing more yet. The 24 core headers
+  compile against a stub `rtthread.h`, the lwIP backend type-checks against lwIP 2.2.0 headers, and
+  15 runtime self-checks pass on qemu-vexpress-a9 (`tools/rtthread_qemu.sh`). Real boards are
+  unverified, and lwIP traffic does not run yet: RT-Thread 5.4 `netdev.h` writes `#if NETDEV_IPV6`
+  while Kconfig emits an empty macro. The full record is in `docs/validation_lanes_zh.md` 5.2.
+- Transport is UDP only and the endpoint type is IPv4 only: the SD IPv6 endpoint and IPv6 multicast
+  options encode and parse, but there is no IPv6 send or receive path. TCP is not implemented.
 - SOME/IP-TP tracks 16-byte units, so segments may arrive in any order; overlapping segments are
-  dropped. E2E ships Profiles 1, 2, 4, 5 and 7. Profile 2 is cyclic: call `Check()` when data arrives and
-`Cycle()` once per cycle without data; the state machine's outcome is reported through
-`E2ECheck::status` (kRepeated, kOkSomeLost, kSync, kWrongSequence).
+  dropped. E2E ships Profiles 1, 2, 4, 5 and 7; Profiles 3, 6, 11, 22 and 44 are not implemented.
+  Profile 2 is cyclic: call `Check()` when data arrives and `Cycle()` once per cycle without data;
+  the state machine's outcome is reported through `E2ECheck::status` (kRepeated, kOkSomeLost, kSync,
+  kWrongSequence).
 
 ## Documentation
 

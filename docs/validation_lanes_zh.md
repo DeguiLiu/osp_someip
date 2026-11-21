@@ -22,7 +22,19 @@ setarch $(uname -m) -R env ASAN_OPTIONS=detect_leaks=1 ./build-asan/tests/someip
 ```
 
 验收：154 个用例 / 53032 条断言全过；sanitizer 无报告；零分配进程返回 0；
-`someip_headers_self_contained` 把 26 个公开头文件逐个单独编译，全部通过。
+`someip_headers_self_contained` 把 30 个公开头文件逐个单独编译，全部通过。
+
+三点复现注意（2026-11-21 复核）：
+
+- 53032 含组播用例的 24 条断言，要让 `ctest` 跑到它必须传
+  `-DSOMEIP_TEST_MCAST_IFACE=<本机 IPv4>`；不传则该用例跳过，断言数是 53008。
+- sanitizer 那行的 `setarch $(uname -m) -R` 不是可选装饰：gcc 11 的 libasan 6 与 kernel 6.5
+  的高熵 ASLR 冲突，不关随机化时大约每 20 次启动崩 1 次，现象是没有报告的
+  `AddressSanitizer:DEADLYSIGNAL`，整轮 `ctest` 会随机挂掉几十项；关掉后 157 项全过、零报告。
+  这是工具链与内核的组合问题，不是本仓库的内存缺陷。
+- aarch64 通道要先 `export LD_LIBRARY_PATH=$AARCH64_TOOLCHAIN_ROOT/usr/lib/x86_64-linux-gnu`，
+  否则交叉 binutils 的 `as` 找不到 `libopcodes-2.38-arm64.so`。工具链文件里那句
+  `set(ENV{LD_LIBRARY_PATH})` 只在 configure 进程内生效，`cmake --build` 是另一个进程。
 
 E2E Profile 4 的 CRC 另外做过一次交叉核对：用临时程序把 vsomeip 的 `crc.cpp` 与
 `profile_04.cpp` 编进同一个进程，对 1000 组随机缓冲比较
@@ -46,9 +58,12 @@ cmake --build build/coverage -j8 && ctest --test-dir build/coverage
 gcovr -r . --filter 'include/osp/someip/' --txt-summary build/coverage
 ```
 
-当前结果：行 59.0%、函数 73.0%、分支 37.5%。`server.hpp` / `client.hpp` 是模板，
-每个 TU 各实例化一次、gcov 按实例计数，所以这两项偏低；单个头文件里 `header.hpp`、
-`udp_link.hpp` 为 100%，`sd/option_view.hpp` 为 97%。
+当前结果（2026-11-21 复测，含组播用例）：行 57.6%、函数 69.7%、分支 35.5%。
+`server.hpp` / `client.hpp` 是模板，每个 TU 各实例化一次、gcov 按实例计数，所以这两项偏低
+（分别 39% 与 64%）；单个头文件里 `header.hpp`、`udp_link.hpp` 为 100%，
+`sd/option_view.hpp` 为 97%。跑覆盖率时同样要给 `SOMEIP_TEST_MCAST_IFACE`，否则组播用例跳过，
+`udp_link.hpp` 掉到 54%。数字比上一次（Profile 2/5 合入前）略低，来自新增代码本身：
+`e2e_profile2.hpp` 行覆盖 84%、`e2e_profile5.hpp` 95%，把均值拉了下来，不是既有代码的覆盖回退。
 
 CI 同路径（干净目录、拉取上游 newosp 而不是用同级目录）也跑过一遍：
 
@@ -383,7 +398,7 @@ tools/rtthread_qemu.sh "$PWD/rt-thread"
 | 双进程 C++ demo | 完成 | — |
 | Python 探针双向互通 | 完成 | — |
 | 组播（真实网卡） | 完成 | `ens192`，24 条断言 |
-| aarch64 交叉构建 + qemu | 完成 | 113 过 / 1 跳过（组播），基准见 `benchmark_report_zh.md` |
+| aarch64 交叉构建 + qemu | 完成 | 155 过 / 1 跳过（组播），基准见 `benchmark_report_zh.md` |
 | vsomeip 互操作（netns + veth） | 完成 | 双向通过，见第 3 节 |
 | vsomeip 容器方式 | 未执行 | 用户不在 docker 组，已被 netns 方式替代 |
 | ARM 板卡冒烟 | 待执行 | 没有目标板 |

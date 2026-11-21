@@ -208,8 +208,9 @@ CRC-8/H2F 与 4 位计数器，CRC 覆盖计数器字节、载荷与按计数器
 | L3 目标 | ARM Linux / RT-Thread 构建与静态内存报告 | 无堆、尺寸达标 |
 
 当前 L0/L1 结果：154 个用例、53032 条断言（含 SD 变异扫描、4000 轮 TP 分段扫描与五套 E2E 的 2000 轮随机扫描），外加零分配见证进程；
-普通构建、`-fno-exceptions -fno-rtti` 构建与 ASan+UBSan 构建均通过。L2 的组播在真实网卡
-（`ens192`）上验证；L3 完成 aarch64 交叉构建与 qemu 运行，153 过、1 跳过。
+普通构建、`-fno-exceptions -fno-rtti` 构建、ASan+UBSan 构建与 aarch64 交叉构建四种构型全部通过，
+且都在 `-Wall -Wextra -Wpedantic -Wconversion -Wshadow` 下零告警。L2 的组播在真实网卡
+（`ens192`）上验证；L3 完成 aarch64 交叉构建与 qemu 运行，155 过、1 跳过。
 
 ## 5. 里程碑与风险
 

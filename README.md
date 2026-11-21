@@ -6,8 +6,8 @@ SOME/IP 协议栈，C++17 头文件库，面向嵌入式 Linux 与 RT-Thread，�
 [newosp](https://github.com/DeguiLiu/newosp)。包含线格式、Service Discovery、服务端和客户端，
 不包含 socket 与线程：收发和时钟由调用方注入，可以接进已有的事件循环或 RTOS 任务。
 
-目前完成 M0–M3，并补上 SOME/IP-TP 重组与 E2E Profile 1。真机与第三方互操作的情况见
-“状态与限制”。
+目前完成 M0–M3，并补上 SOME/IP-TP 重组与 E2E Profile 1/2/4/5/7；传输只有 UDP，端点只有
+IPv4。真机与第三方互操作的情况见“状态与限制”。
 
 ## 能力
 
@@ -45,11 +45,16 @@ cmake --build --preset host-debug -j8
 ctest --preset host-debug
 ```
 
-主机上 154 个用例、53032 条断言通过；`noexc` 与 ASan + UBSan 两组构建另行跑通。
-aarch64 交叉构建后在 qemu 下 113 过、1 跳过（组播用例需要真机网卡）。
-x86 回环 3000 次 RPC 往返，p50 5 µs、p99 9–12 µs，约 16 万次请求/秒；
-aarch64（qemu）同一基准 p50 11 µs、p99 24 µs，约 6.6 万次请求/秒。
-数据来自 `docs/benchmark_report_zh.md`。
+主机上 154 个用例、53032 条断言通过（`ctest` 158 项）；`noexc` 与 ASan + UBSan 两组构建
+另行跑通，Debug、Release+noexc、ASan+UBSan、aarch64 四种构型编译零告警。
+aarch64 交叉构建后在 qemu 下 155 过、1 跳过（组播用例需要真机网卡）。
+x86 回环 3000 次 RPC 往返，p50 5–6 µs、p99 9–24 µs，约 12 万–16 万次请求/秒；
+aarch64（qemu）同一基准 p50 12–14 µs、p99 27–49 µs，约 5.4 万–6.6 万次请求/秒。
+吞吐随机器负载波动，数据与测量条件见 `docs/benchmark_report_zh.md`（最近复核 2026-11-21）。
+
+ASan 构型在 gcc 11 加 kernel 6.5 上要关掉地址随机化再跑，否则 libasan 会与高熵 ASLR 冲突、
+随机在启动阶段崩掉（`setarch $(uname -m) -R ctest --preset asan`），
+细节见 `docs/validation_lanes_zh.md`。
 
 ## 接入方式
 
@@ -144,22 +149,33 @@ newosp 头文件不随本包安装，消费端需要自己提供 include 路径�
 
 ```text
 include/osp/someip/
-  header.hpp       SOMF 头，值类型与视图
-  message.hpp      消息编解码、数据报遍历
-  payload.hpp      载荷骨架、OpaquePayload
-  owned_payload.hpp  定容持有载荷
-  wire.hpp         大端写入器与编码器 CRTP 骨架
-  sd/              SD 类型、entry、option、header、会话计数
-  sd_codec.hpp     SD 数据报构建器
-  server.hpp       服务端
-  client.hpp       客户端
-  udp_link.hpp     newosp UDP 套接字适配
-  e2e.hpp          E2E 策略钩子
-  e2e_profile1.hpp E2E Profile 1
-  tp.hpp           SOME/IP-TP 分段与重组
-examples/          服务端、客户端、回环基准
-tests/             Catch2 测试，含手写线格式 golden
-docs/              设计、验证、基准、静态分析文档
+  someip.hpp           伞头文件
+  header.hpp           SOMF 头，值类型与视图
+  message.hpp          消息编解码、数据报遍历
+  message_id.hpp       消息 ID：service [31:16] 与 method [15:0]
+  message_type.hpp     消息类型字段与 TP 标志
+  return_code.hpp      返回码：具名值与通用/接口自定义区间
+  error.hpp            线格式错误码，纯值、无异常无堆
+  endpoint.hpp         IPv4 端点与 SD 组播常量
+  service_instance.hpp 服务标识：service / instance / major
+  payload.hpp          载荷骨架、OpaquePayload
+  owned_payload.hpp    定容持有载荷
+  wire.hpp             大端写入器与编码器 CRTP 骨架
+  sd/                  SD 类型、entry、option、header、会话计数，含零拷贝视图
+  sd_codec.hpp         SD 数据报构建器
+  server.hpp           服务端
+  client.hpp           客户端
+  udp_link.hpp         newosp UDP 套接字适配
+  e2e.hpp              E2E 策略钩子
+  e2e_profile1.hpp     Profile 1：CRC-8 SAE J1850
+  e2e_profile2.hpp     Profile 2：CRC-8/H2F 加计数器状态机
+  e2e_profile4.hpp     Profile 4：CRC-32/AUTOSAR
+  e2e_profile5.hpp     Profile 5：CRC-16/CCITT-FALSE
+  e2e_profile7.hpp     Profile 7：CRC-64/XZ
+  tp.hpp               SOME/IP-TP 分段与重组
+examples/              服务端、客户端、回环基准
+tests/                 Catch2 测试，含手写线格式 golden
+docs/                  设计、验证、基准、静态分析文档
 ```
 
 ## 状态与限制
@@ -170,12 +186,16 @@ docs/              设计、验证、基准、静态分析文档
 - vsomeip 3.4.10 双向互操作已通过（用户命名空间加 veth 对连，不用 Docker）：
   服务端侧收到订阅、事件与 RPC 应答，客户端侧完成发现、订阅、RPC 与事件。
   复现见 `tools/vsomeip_interop.sh` 与 `docs/validation_lanes_zh.md`。
-- RT-Thread：核心 24 个头文件用桩 `rtthread.h` 编译通过，lwIP 后端对 lwIP 2.2.0 头文件
-  零告警通过类型检查；在 qemu-vexpress-a9 上完成 15 项运行时自检（`tools/rtthread_qemu.sh`）。
-  真实板卡与 lwIP 收发仍未验证。
-- SOME/IP-TP 按 16 字节单元记录到达情况，乱序可重组，重叠分段丢弃；E2E 只带 Profile 1，
-  Profile 2 是按周期推进的状态机：数据到达时调 `Check()`，某周期没有数据时调一次 `Cycle()`；
-  状态经 `E2ECheck::status` 暴露（kRepeated / kOkSomeLost / kSync / kWrongSequence）。
+- RT-Thread：目前只到“编译期可移植 + qemu 自检”。核心 24 个头文件用桩 `rtthread.h` 编译通过，
+  lwIP 后端对 lwIP 2.2.0 头文件零告警通过类型检查，qemu-vexpress-a9 上完成 15 项运行时自检
+  （`tools/rtthread_qemu.sh`）。真实板卡未验证；lwIP 运行时收发也没打通，卡在 RT-Thread 5.4
+  `netdev.h` 的 `#if NETDEV_IPV6` 遇 Kconfig 空宏，过程见 `docs/validation_lanes_zh.md` 5.2。
+- 传输只有 UDP，端点类型只有 IPv4：SD 的 IPv6 endpoint 与 IPv6 multicast option 能编解码，
+  但没有 IPv6 收发路径；TCP 未实现。
+- SOME/IP-TP 按 16 字节单元记录到达情况，乱序可重组，重叠分段丢弃。E2E 内置 Profile
+  1/2/4/5/7，Profile 3/6/11/22/44 未实现。Profile 2 是按周期推进的状态机：数据到达时调
+  `Check()`，某周期没有数据时调一次 `Cycle()`；状态经 `E2ECheck::status` 暴露
+  （kRepeated / kOkSomeLost / kSync / kWrongSequence）。
 - 参考实现只用于核对行为，不复制其代码。
 
 ## 文档

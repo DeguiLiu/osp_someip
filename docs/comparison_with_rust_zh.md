@@ -2,13 +2,13 @@
 
 结论：两者在线格式与 SD 语义对齐，差异集中在运行时模型：Rust 用 async 执行器、分配器可选，
 本项目用调用方驱动 + 定容 + 无堆。功能上本项目已补齐 SD 编解码、服务端与客户端核心、
-SOME/IP-TP 重组、E2E Profile 1、真实网卡组播与 vsomeip 双向互操作；仍未做的是板级实测。
+SOME/IP-TP 重组、E2E Profile 1/2/4/5/7、真实网卡组播与 vsomeip 双向互操作；仍未做的是板级实测。
 
 ## 1. 口径
 
 | 项 | Rust 原型 | 本项目 |
 |---|---|---|
-| 版本 | simple-someip 0.15（`src/` 39,035 行） | M0–M3 核心（`include/` 4,600 行） |
+| 版本 | simple-someip 0.15（`src/` 39,035 行） | M0–M3 核心（`include/` 30 个头文件、5,388 行） |
 | 语言 | Rust 2024，`no_std` + 可选 `alloc` | C++17，header-only |
 | 运行时 | tokio（std）或 embassy（bare-metal） | 调用方事件循环 + `Tick(now_ms)` |
 | 分配 | `heapless` 用于 SD；`std` 特性下 `Vec`/`Arc` | 全链路无堆（见证进程守护） |
