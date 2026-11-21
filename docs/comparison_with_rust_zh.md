@@ -1,8 +1,10 @@
 # 与 Rust 原型（simple_someip）的对照
 
 结论：两者在线格式与 SD 语义对齐，差异集中在运行时模型：Rust 用 async 执行器、分配器可选，
-本项目用调用方驱动 + 定容 + 无堆。功能上本项目已补齐 SD 编解码、服务端与客户端核心、
-SOME/IP-TP 重组、E2E Profile 1/2/4/5/7、真实网卡组播与 vsomeip 双向互操作；仍未做的是板级实测。
+本项目用调用方驱动 + 定容 + 无堆。功能上本项目多出 SOME/IP-TP 分段重组、E2E Profile 1/2/4/5/7、
+类型化请求分发与零分配门禁；上游多出 payload 类型序列化、完整的 Find/Offer 时序与可直接运行的
+bare-metal 运行时。两边都只有 UDP 加 IPv4 收发、都不含 TLS；本项目仍缺目标板实测数据。
+（2026-11-21 对上游 main `5cab510`、v0.15.0 复核）
 
 ## 1. 口径
 
@@ -20,14 +22,18 @@ SOME/IP-TP 重组、E2E Profile 1/2/4/5/7、真实网卡组播与 vsomeip 双向
 | 能力 | Rust | 本项目 | 说明 |
 |---|---|---|---|
 | SOME/IP 头、消息、遍历 | 有 | 有 | 逐字节对齐 19 条 golden |
-| SOME/IP-TP | 遍历时跳过并计数（`protocol/tp` 只有占位模块） | 跳过并计数；另提供 `TpReassembly`，按 16 字节单元记录到达情况，支持乱序 | 本项目多一层重组能力 |
+| SOME/IP-TP | 只识别 message type 的 TP flag（`MESSAGE_TYPE_TP_FLAG = 0x20`、`is_tp()`），遍历时跳过 TP 帧；`src/protocol/tp/mod.rs` 是 1 行占位，没有分段头编解码，既不发也不重组 | 分段头编解码加 `TpReassembly` 定容重组：按 16 字节单元记录到达情况、支持乱序、重叠分段丢弃、按（消息 ID，请求 ID）区分会话、超时释放 | 本项目多一整套 TP 能力 |
 | SD entry/option/header 编解码 | 有 | 有 | entry/option 均含零拷贝视图 |
 | SD 数据报构建（Find/Offer/Stop/Subscribe/Ack） | 有 | 有 | 本项目另含 Find 构建器 |
 | 服务端 offer / 订阅 / 事件发布 | 有（async） | 有（同步核心） | 本项目含 TTL 到期与 TTL/2 重播 |
-| 服务端请求分发 | 非 SD 原始数据报回调 | `RequestHandler` 类型化分发并自动回 Response/Error | 本项目支持 fire-and-forget |
+| 服务端请求分发 | `with_non_sd_observer(NonSdRequestCallback)`：非 SD 报文交给原始回调，应答由调用方自己编 | `RequestHandler` 类型化分发，返回 `RequestReply` 后自动回 Response / Error | 本项目支持 fire-and-forget |
 | 服务观察 | 有（`with_service_observer`） | 有（`Observer` 模板：远端 offer 可用 / 消失） | 仅上报变化，不缓存给业务 |
 | 客户端发现 / 订阅 / RPC | 有（async，自动续订、重启检测） | 有（回调 + 超时 + 续订 + 可用性 + 重启检测） | 请求 ID 规则一致：client<<16 \| session |
 | E2E 保护 | 仅 `E2EHandle` trait 钩子 | 策略钩子 + 内置 Profile 1/2/4/5/7 | 本项目带五个可直接用的 profile |
+| payload 类型序列化 | 有：自 0.13.0 起用 `automotive-wire-codec` 0.3 的 `Encode` / `Decode` / `DecodeIter`，另有 `raw_payload`、`heapless_payload` | 无：只搬字节，`OpaquePayload` 借用或 `OwnedPayload<Capacity>` 定容持有 | 范围取舍，类型编解码归调用方 |
+| Find / Offer 时序 | Find 三阶段：`initial_delay` 10–100 ms 带 seed 随机、`repetitions_base_delay` 按 2^n 倍增、`repetitions_max` 次，且可被「服务丢失」打断；cyclic offer delay 可配，并校验 1 ms ≤ delay ≤ TTL（`CyclicOfferDelayOutOfRange`） | Find 固定 3 次、100 ms 起倍增（`kFindRepetitions` / `kFindBaseDelayMs`）；Offer 立即发一次，之后按 TTL/2 重播 | 上游时序参数更完整，本项目是够用的最小子集 |
+| bare-metal 运行时 | 有：`bare-metal-runtime` feature（embassy-executor + callback transport + RX mailbox + `static_channels`），配 `bare_metal_client/server`、`embassy_net_client` 示例与 `interop_bare_metal` 测试 | 无运行时：核心库，socket / 线程 / 时钟由调用方注入；RT-Thread 侧只到编译期可移植加 qemu 自检 | 本项目 lwIP 运行时收发未打通，见验证通道 5.2 |
+| 日志与追踪 | `tracing`（feature 门控） | 不打印，状态只经回调交给调用方 | — |
 | TCP / IPv6 收发 | 都没有：发送路径强制 `(SocketAddr::V4, TransportProtocol::Udp)`，否则返回 `Error::UnsupportedEndpoint`；SD 层有 `Tcp` 枚举与 IPv6 option 编解码，端点选择是「UDP 优先，无 UDP 则第一个 TCP」；服务端对 TCP+UDP 多端点订阅者明确未支持 | 都没有：SD 层有 `kTcp` 枚举与 IPv6 option 编解码，端点解析按 protocol 过滤、只接受 0x11，无可用项时回退 SD 源地址 | 上游在发送层拒绝，本项目在解析层过滤；两者都不会把 UDP 数据报发往 TCP 端口 |
 | 组播加入 | 有（socket2） | 有（`JoinSdMulticast` + `IP_MULTICAST_IF`） | 本项目已在真实网卡 `ens192` 上验证收发 |
 | 互操作实测（vsomeip） | 有（Docker 容器） | 有（3.4.10，netns + veth，双向） | 本项目不走容器，见验证通道文档 |
@@ -50,7 +56,7 @@ SOME/IP-TP 重组、E2E Profile 1/2/4/5/7、真实网卡组播与 vsomeip 双向
 
 | 项 | Rust | 本项目 |
 |---|---|---|
-| 单元/集成测试 | 540 个 `#[test]` + 285 个 `#[tokio::test]` | 158 个用例、53055 条断言（含 SD 变异、TP 分段与五套 E2E 随机扫描） |
+| 单元/集成测试 | 540 个 `#[test]` + 284 个 `#[tokio::test]`（`src/` + `tests/` + `examples/`，2026-11-21 对 main `5cab510` 复核） | 158 个用例、53055 条断言（含 SD 变异、TP 分段与五套 E2E 随机扫描） |
 | 线格式 golden | 19 条手写字面量 | 19 条同源字面量（逐字节移植） |
 | 无分配 | `no_alloc_witness` 测试 | `someip_no_alloc` 进程，覆盖 server + client |
 | 真实网络 | tokio + vsomeip 容器互操作 | 真实 UDP 用例 + 双进程 demo + Python 探针 + vsomeip 双向互操作 |
@@ -63,3 +69,7 @@ SOME/IP-TP 重组、E2E Profile 1/2/4/5/7、真实网卡组播与 vsomeip 双向
 1. **板级实测**：aarch64 已完成交叉构建与 qemu 运行，仍缺真实板卡的内存与吞吐数据。
 2. **互操作广度**：vsomeip 3.4.10 的常规路径已通过；TLS、TP 事件与跨交换机组播未覆盖。
 3. **TP 重叠分段**：乱序已支持，重叠分段直接丢弃；Rust 侧未实现重组，因此没有可对照的行为。
+4. **Find / Offer 时序完整度**：上游有 initial delay 随机化、repetition 阶段与 cyclic delay 对 TTL 的
+   合法性校验，本项目是固定参数的最小子集；要满足严格 AUTOSAR 时序时得补齐。
+5. **bare-metal 运行时**：上游能用 embassy-executor 直接跑起来，本项目在 RT-Thread 上还缺 lwIP 运行时
+   收发（见验证通道 5.2）。

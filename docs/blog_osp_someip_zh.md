@@ -54,8 +54,12 @@ RTOS 上不成立。
 [simple_someip](https://github.com/luminartech/simple_someip)（simple-someip 0.15，MIT OR
 Apache-2.0）：19 条线格式 golden 字面量逐字节同源移植，vsomeip 互操作的对端程序 `peer` 取自它的
 `tests/data/vsomeip-peer`。C++17 这一版不是逐行翻译，而是把 async 执行器换成「调用方驱动加定容加
-无堆」，并补上原型没有的三样：SOME/IP-TP 乱序重组、E2E Profile 1/2/4/5/7、`RequestHandler`
-类型化请求分发；能力对照见 [comparison_with_rust_zh.md](comparison_with_rust_zh.md)。
+无堆」，并补上原型没有的三样：SOME/IP-TP 分段重组、E2E Profile 1/2/4/5/7、`RequestHandler`
+类型化请求分发。反过来，原型仍有三样本项目没跟：更完整的 Find/Offer 时序（initial delay 随机化、
+repetition 阶段、cyclic delay 对 TTL 的合法性校验）、payload 类型序列化
+（`automotive-wire-codec` 的 `Encode` / `Decode`）与可直接运行的 bare-metal 运行时
+（embassy-executor 加 callback transport）。逐项对照见
+[comparison_with_rust_zh.md](comparison_with_rust_zh.md)。
 
 许可证决定了两个参考项目的角色分工：Rust 原型是 MIT OR Apache-2.0，允许移植（保留声明），因此可以
 作为行为基线与 golden 来源；vsomeip 是 MPL-2.0，只做黑盒对端，一行源码都不进本仓库。测试期望值
