@@ -2,7 +2,10 @@
 
 2026-11-21 · osp-someip · 阅读约 15 分钟
 
-三个结论放在最前面：
+osp-someip 不打算替代 vsomeip，它只是把「SOME/IP 协议本身」这部分单独拿出来，做到能塞进一个没有堆、
+没有多线程、不接受框架的运行环境里——并且用可执行的证据说明它确实塞得进去。
+
+在这个前提下，三个结论：
 
 1. osp-someip 与 vsomeip 不在同一层。vsomeip 3.4.10 是带 routing manager、JSON 配置体系、插件与
    线程池的运行时框架，以共享库形式交付；osp-someip 是 30 个头文件、在编译期展开进调用方的协议核心，
@@ -46,6 +49,18 @@ RTOS 上不成立。
 
 这四条决定了设计方向：把 SOME/IP 做成一个纯函数式的核心——喂给它字节、端点、当前时间，它吐回字节
 和回调，其余一概不管。
+
+起点也不是白纸。线格式与 SD 语义来自上游 Rust 原型
+[simple_someip](https://github.com/luminartech/simple_someip)（simple-someip 0.15，MIT OR
+Apache-2.0）：19 条线格式 golden 字面量逐字节同源移植，vsomeip 互操作的对端程序 `peer` 取自它的
+`tests/data/vsomeip-peer`。C++17 这一版不是逐行翻译，而是把 async 执行器换成「调用方驱动加定容加
+无堆」，并补上原型没有的三样：SOME/IP-TP 乱序重组、E2E Profile 1/2/4/5/7、`RequestHandler`
+类型化请求分发；能力对照见 [comparison_with_rust_zh.md](comparison_with_rust_zh.md)。
+
+许可证决定了两个参考项目的角色分工：Rust 原型是 MIT OR Apache-2.0，允许移植（保留声明），因此可以
+作为行为基线与 golden 来源；vsomeip 是 MPL-2.0，只做黑盒对端，一行源码都不进本仓库。测试期望值
+（oracle）只允许来自规范与手写字面量，不允许「把某个实现的输出抄成期望值」——那会把对端的缺陷一起
+继承过来。分工细则见 [reference_projects_zh.md](reference_projects_zh.md)。
 
 ## 2. 三条硬边界
 
@@ -154,9 +169,10 @@ osp::someip::Server<UdpSink, 8U, 16U, 1400U, Echo> server(sink);
 
 ## 5. 兼容吗：网络上互通，边界要说清
 
-**能互通，双向都实测过**。对端是 vsomeip 3.4.10（Release，Boost 1.74）。本机账号不在 docker 组，
-因此没有用容器，而是把两套栈放进各自的网络命名空间、用 veth 对连：两边各有地址与端口空间，都能绑
-30490，效果等同双机部署，且用户命名空间里就有建 veth、配地址、开组播的权限。SD 走
+**能互通，双向都实测过**。对端是 vsomeip 3.4.10（Release，Boost 1.74），跑的是取自 Rust 原型的
+`peer` 程序（`simple_someip/tests/data/vsomeip-peer`，自身即 routing manager）。本机账号不在
+docker 组，因此没有用容器，而是把两套栈放进各自的网络命名空间、用 veth 对连：两边各有地址与端口
+空间，都能绑 30490，效果等同双机部署，且用户命名空间里就有建 veth、配地址、开组播的权限。SD 走
 239.255.0.255:30490，TTL 3 s，cyclic offer 1000 ms。脚本是 `tools/vsomeip_interop.sh`。
 
 | 方向 | 观察到的消息 | 结果 |
@@ -202,8 +218,10 @@ UDP 前面、以及选项落在第二个 option run 这三种情况。
 
 协议栈最怕「自己测自己」，所以对照物尽量来自仓库之外：
 
-1. **手写 golden 加模糊扫描**。线格式期望值手写，SD / TP / E2E 三类做模糊扫描；E2E 的 CRC 校验值只
-   用标准目录里的公开值（如 Profile 4 的 `0x1697D06A`、Profile 7 的 `0x995DC9BBDF1939FA`）。
+1. **手写 golden 加模糊扫描**。线格式期望值由人按布局推导，19 条 golden 与 Rust 原型同源、逐字节
+   移植（属于「可移植来源」这一类，不是抄某个实现的输出）；SD / TP / E2E 三类做模糊扫描；E2E 的
+   CRC 校验值只用标准目录里的公开值（如 Profile 4 的 `0x1697D06A`、Profile 7 的
+   `0x995DC9BBDF1939FA`）。
 2. **第二套独立实现**。`tools/sd_probe.py` 只用 Python 标准库，可当客户端或服务端，与 C++ 侧双向
    对跑；TP 分段也用它驱动（128 字节请求切 4 段，服务端重组回显）。
 3. **与参考实现逐字节核对**。E2E Profile 2 对 AUTOSAR 官方 C 实现（`E2E_P02.c` 加 `Crc.c`）：
@@ -291,5 +309,5 @@ cmake -S . -B build-demo -DSOMEIP_BUILD_EXAMPLES=ON && cmake --build build-demo 
 | [benchmark_report_zh.md](benchmark_report_zh.md) | 回环性能基线与测量条件 |
 | [static_analysis_zh.md](static_analysis_zh.md) | cpplint / clang-tidy 结论与偏差 |
 
-一句话收尾：osp-someip 不打算替代 vsomeip，它只是把「SOME/IP 协议本身」这部分单独拿出来，做到能塞进
-一个没有堆、没有多线程、不接受框架的运行环境里——并且用可执行的证据说明它确实塞得进去。
+一句话收尾：这个库的每条能力都对应一个可执行的证据——零分配见证进程、手写 golden 字面量、只用标准库
+的 Python 第二实现、vsomeip 双向互操作、qemu-system 全内核运行。文档会过期，门禁不会。
