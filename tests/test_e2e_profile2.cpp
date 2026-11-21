@@ -85,7 +85,6 @@ TEST_CASE("e2e p2 - protect starts at counter one and round trips", "[e2e][profi
 TEST_CASE("e2e p2 - counters drive ok, lost, repeated and resync", "[e2e][profile2]") {
   Profile sender;
   Profile receiver;
-  std::size_t size = 0U;
   std::array<std::array<std::uint8_t, 8U>, 8U> messages{};
   std::array<std::size_t, 8U> sizes{};
   for (std::size_t index = 0U; index < messages.size(); ++index) {

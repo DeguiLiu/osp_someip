@@ -31,12 +31,13 @@ std::uint32_t NextRandom(std::uint32_t& state) noexcept {
 
 template <typename Profile>
 void Sweep(Profile& sender, Profile& receiver, std::uint32_t header_size) {
+  constexpr std::uint32_t kBufferSize = 96U;
   std::uint32_t state = 0xE2E00001U;
-  std::array<std::uint8_t, 96U> buffer{};
-  std::array<std::uint8_t, 96U> input{};
+  std::array<std::uint8_t, kBufferSize> buffer{};
+  std::array<std::uint8_t, kBufferSize> input{};
 
   for (std::uint32_t round = 0U; round < 2000U; ++round) {
-    const std::uint32_t length = NextRandom(state) % (buffer.size() + 1U);
+    const std::uint32_t length = NextRandom(state) % (kBufferSize + 1U);
     for (std::uint32_t index = 0U; index < length; ++index) {
       input[index] = static_cast<std::uint8_t>(NextRandom(state));
     }
@@ -49,7 +50,7 @@ void Sweep(Profile& sender, Profile& receiver, std::uint32_t header_size) {
     }
 
     // Protect on a copy and require a fresh receiver to accept it.
-    const std::uint32_t payload_size = NextRandom(state) % (buffer.size() - header_size + 1U);
+    const std::uint32_t payload_size = NextRandom(state) % (kBufferSize - header_size + 1U);
     std::memcpy(buffer.data(), input.data(), payload_size);
     const auto protected_body = sender.Protect(
         osp::someip::MessageId(0x12340001U), kUpperHeader,
